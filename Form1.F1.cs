@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -16,9 +17,6 @@ namespace WindowsFormsApp1
         private const int MenuDelayMs = 200;  // пауза после ПКМ, пока откроется меню
         private const int StepDelayMs = 100;  // пауза между нажатиями клавиш
         private const int ClipboardTimeoutMs = 2000;
-
-        // Какой по счёту символ № использовать: 1 — первый, 2 — второй и т.д.
-        private const int MarkerOccurrence = 1;
 
         private const int F2HotkeyId = 0xF2;
         private const uint VK_F2 = 0x71;
@@ -228,15 +226,15 @@ namespace WindowsFormsApp1
             {
                 if (!Clipboard.ContainsText()) { ShowF1Status("В буфере нет текста"); return; }
 
-                string result, error;
-                if (!F1ClipboardProcessor.TryExtract(Clipboard.GetText(), MarkerOccurrence, out result, out error))
+                string result, kind, error;
+                if (!F1ClipboardProcessor.TryExtract(Clipboard.GetText(), out result, out kind, out error))
                 {
                     ShowF1Status(error);
                     return;
                 }
 
                 Clipboard.SetText(result);
-                ShowF1Status("Скопировано: " + result);
+                ShowF1Status(kind + ": " + result);
             }
             catch (Exception ex)
             {
@@ -254,14 +252,95 @@ namespace WindowsFormsApp1
 
     internal static class F1ClipboardProcessor
     {
-        // Настройки правила — меняйте здесь.
-        private const char Marker = '№';
-        private const int TakeAfterMarker = 28; // сколько символов берём после №
-        private const int SkipChars = 8;        // «с 9-го символа» => пропускаем 8
-        private const int ResultLength = 12;    // сколько символов копируем
+        private const RegexOptions Opt = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
 
-        /// <param name="occurrence">Какой по счёту № использовать (1 = первый).</param>
-        public static bool TryExtract(string text, int occurrence, out string result, out string error)
+        // Признаки типа документа (пробелы/переносы между словами не важны).
+        private static readonly Regex RevocationRx = new Regex(@"Отзыв\s+документа", Opt);
+        private static readonly Regex StatementRx = new Regex(@"Заявление", Opt);
+        private static readonly Regex SuspendedRx = new Regex(@"Номер\s+приостанавливаемого\s+распоряжения", Opt);
+        private static readonly Regex PayerAccountRx = new Regex(@"Номер\s+сч[её]та\s+плательщика", Opt);
+
+        // --- Настройки правил: меняйте здесь ---------------------------------------
+
+        // Общие для правил с №: после № берём 28 символов, из них пропускаем N и берём M.
+        private const char Marker = '№';
+        private const int TakeAfterMarker = 28;
+
+        // «Заявление» + «Номер приостанавливаемого распоряжения»: второй №, с 9-го символа 13 знаков.
+        private const int SuspendedOccurrence = 2;
+        private const int SuspendedSkip = 8;
+        private const int SuspendedLength = 13;
+
+        // Только «Заявление»: первый №, с 9-го символа 12 знаков.
+        private const int StatementOccurrence = 1;
+        private const int StatementSkip = 8;
+        private const int StatementLength = 12;
+
+        // «Отзыв документа»: после «Номер счета плательщика» находим «BY»,
+        // начиная с «B» пропускаем 7 символов (т.е. с 8-го) и берём 13 знаков.
+        private const string IbanPrefix = "BY";
+        private const int IbanSkip = 7;
+        private const int IbanLength = 13;
+
+        // ---------------------------------------------------------------------------
+
+        /// <param name="kind">Распознанный тип документа (для статуса).</param>
+        public static bool TryExtract(string text, out string result, out string kind, out string error)
+        {
+            result = "";
+            kind = "";
+
+            if (RevocationRx.IsMatch(text))
+            {
+                kind = "Отзыв документа";
+                return ExtractIban(text, out result, out error);
+            }
+
+            if (StatementRx.IsMatch(text))
+            {
+                if (SuspendedRx.IsMatch(text))
+                {
+                    kind = "Заявление (приостановление)";
+                    return ExtractAfterMarker(text, SuspendedOccurrence, SuspendedSkip, SuspendedLength, out result, out error);
+                }
+
+                kind = "Заявление";
+                return ExtractAfterMarker(text, StatementOccurrence, StatementSkip, StatementLength, out result, out error);
+            }
+
+            error = "Тип документа не определён (нет «Отзыв документа» / «Заявление»)";
+            return false;
+        }
+
+        private static bool ExtractIban(string text, out string result, out string error)
+        {
+            result = "";
+            Match label = PayerAccountRx.Match(text);
+            if (!label.Success)
+            {
+                error = "Не найден текст «Номер счета плательщика»";
+                return false;
+            }
+
+            int by = text.IndexOf(IbanPrefix, label.Index + label.Length, StringComparison.Ordinal);
+            if (by < 0)
+            {
+                error = "После «Номер счета плательщика» нет «" + IbanPrefix + "»";
+                return false;
+            }
+
+            if (text.Length - by < IbanSkip + IbanLength)
+            {
+                error = "После «" + IbanPrefix + "» слишком мало символов";
+                return false;
+            }
+
+            result = text.Substring(by + IbanSkip, IbanLength);
+            error = "";
+            return true;
+        }
+
+        private static bool ExtractAfterMarker(string text, int occurrence, int skip, int length, out string result, out string error)
         {
             result = "";
             int idx = -1;
@@ -286,8 +365,7 @@ namespace WindowsFormsApp1
                 return false;
             }
 
-            string block = after.Substring(0, TakeAfterMarker);
-            result = block.Substring(SkipChars, ResultLength);
+            result = after.Substring(0, TakeAfterMarker).Substring(skip, length);
             error = "";
             return true;
         }
