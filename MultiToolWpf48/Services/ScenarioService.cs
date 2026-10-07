@@ -95,6 +95,18 @@ namespace MultiTool.Services
                 return;
             }
 
+            // «Отзыв документа» + «Заявление на акцепт» — формируется и сохраняется макрос Accept.
+            if (ClipboardProcessor.IsAcceptDocument(text, s))
+            {
+                AcceptOutcome outcome = await AcceptWorkflow.RunAsync(text, s, null);
+                if (outcome.TitleLine.Length > 0) ActivityLog.SetLastValue(outcome.TitleLine);
+                LogKind kind = outcome.Status == AcceptStatus.Saved ? LogKind.Success
+                             : outcome.Status == AcceptStatus.Cancelled ? LogKind.Info
+                             : LogKind.Error;
+                Report(HotkeyKind.F1, "Accept: " + outcome.Message, kind);
+                return;
+            }
+
             ExtractResult result = ClipboardProcessor.Extract(text, s);
             if (!result.Success)
             {
