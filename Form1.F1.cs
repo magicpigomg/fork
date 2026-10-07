@@ -320,6 +320,7 @@ namespace WindowsFormsApp1
         // Признаки типа документа (пробелы/переносы между словами не важны).
         private static readonly Regex RevocationRx = new Regex(@"Отзыв\s+документа", Opt);
         private static readonly Regex StatementRx = new Regex(@"Заявление", Opt);
+        private static readonly Regex OrderRx = new Regex(@"Распоряжение", Opt);
         private static readonly Regex SuspendedRx = new Regex(@"Номер\s+приостанавливаемого\s+распоряжения", Opt);
         private static readonly Regex PayerAccountRx = new Regex(@"Номер\s+сч[её]та\s+плательщика", Opt);
 
@@ -338,6 +339,11 @@ namespace WindowsFormsApp1
         private const int StatementOccurrence = 1;
         private const int StatementSkip = 9;
         private const int StatementLength = 13;
+
+        // «Распоряжение»: второй №, пропускаем 8, берём 13 знаков.
+        private const int OrderOccurrence = 2;
+        private const int OrderSkip = 8;
+        private const int OrderLength = 13;
 
         // «Отзыв документа»: после «Номер счета плательщика» находим «BY»,
         // начиная с «B» пропускаем 8 символов (т.е. с 9-го) и берём 13 знаков.
@@ -371,7 +377,15 @@ namespace WindowsFormsApp1
                 return ExtractAfterMarker(text, StatementOccurrence, StatementSkip, StatementLength, out result, out error);
             }
 
-            error = "Тип документа не определён (нет «Отзыв документа» / «Заявление»)";
+            // Проверяется последним, чтобы не менять поведение «Заявления».
+            // «Распоряжение» не совпадает с «распоряжения» из «Номер приостанавливаемого распоряжения».
+            if (OrderRx.IsMatch(text))
+            {
+                kind = "Распоряжение";
+                return ExtractAfterMarker(text, OrderOccurrence, OrderSkip, OrderLength, out result, out error);
+            }
+
+            error = "Тип документа не определён (нет «Отзыв документа» / «Заявление» / «Распоряжение»)";
             return false;
         }
 
