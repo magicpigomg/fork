@@ -13,6 +13,7 @@ namespace MultiTool.Services
         public const ushort VK_LEFT = 0x25;
         public const ushort VK_RIGHT = 0x27;
         public const ushort VK_DOWN = 0x28;
+        public const ushort VK_9 = 0x39;
         public const ushort VK_A = 0x41;
         public const ushort VK_V = 0x56;
         public const ushort VK_F7 = 0x76;
