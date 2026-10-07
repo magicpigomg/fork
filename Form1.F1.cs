@@ -12,36 +12,67 @@ namespace WindowsFormsApp1
     public partial class Form1
     {
         private const int F1HotkeyId = 0xF1;
-        private const uint VK_F1 = 0x70;
 
         private const int MenuDelayMs = 200;  // пауза после ПКМ, пока откроется меню
         private const int StepDelayMs = 100;  // пауза между нажатиями клавиш
         private const int ClipboardTimeoutMs = 2000;
 
         private const int F2HotkeyId = 0xF2;
-        private const uint VK_F2 = 0x71;
         private const int F3HotkeyId = 0xF3;
-        private const uint VK_F3 = 0x72;
+        private const int ShiftF1HotkeyId = 0xF4;
+        private const int ShiftF3HotkeyId = 0xF6;
         private const int F7DelayMs = 300;    // пауза после F7, пока откроется окно/режим
 
         private bool _f1Busy;
 
+        // Номера горячих клавиш: F1..F3 = 0xF1..0xF3, Shift+F1..F3 = 0xF4..0xF6.
+        private static bool IsOurHotkey(int id)
+        {
+            return id >= F1HotkeyId && id <= ShiftF3HotkeyId;
+        }
+
+        private static int FKeyNumber(int id)
+        {
+            return (id - F1HotkeyId) % 3 + 1; // 1..3
+        }
+
+        private static uint HotkeyVk(int id)
+        {
+            return (uint)(0x70 + FKeyNumber(id) - 1); // VK_F1 = 0x70
+        }
+
+        private static uint HotkeyMods(int id)
+        {
+            return id >= ShiftF1HotkeyId ? F1Native.MOD_SHIFT | F1Native.MOD_NOREPEAT : F1Native.MOD_NOREPEAT;
+        }
+
+        private static string HotkeyName(int id)
+        {
+            return (id >= ShiftF1HotkeyId ? "Shift+" : "") + "F" + FKeyNumber(id);
+        }
+
+        // Тексты для Shift+F1, Shift+F2, Shift+F3.
+        private static readonly string[] ShiftTexts =
+        {
+            "Платежное поручение исполнено",
+            "Уточните сумму приостановления (должна быть равна сумме остатка брони, либо сумме платежных поручений, необходимых для проведения)",
+            "Документ помещён в ОХ"
+        };
+
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            if (!F1Native.RegisterHotKey(Handle, F1HotkeyId, F1Native.MOD_NOREPEAT, VK_F1))
-                ShowF1Status("Не удалось зарегистрировать F1 (занята другой программой)");
-            if (!F1Native.RegisterHotKey(Handle, F2HotkeyId, F1Native.MOD_NOREPEAT, VK_F2))
-                ShowF1Status("Не удалось зарегистрировать F2 (занята другой программой)");
-            if (!F1Native.RegisterHotKey(Handle, F3HotkeyId, F1Native.MOD_NOREPEAT, VK_F3))
-                ShowF1Status("Не удалось зарегистрировать F3 (занята другой программой)");
+            for (int id = F1HotkeyId; id <= ShiftF3HotkeyId; id++)
+            {
+                if (!F1Native.RegisterHotKey(Handle, id, HotkeyMods(id), HotkeyVk(id)))
+                    ShowF1Status("Не удалось зарегистрировать " + HotkeyName(id) + " (занята другой программой)");
+            }
         }
 
         protected override void OnHandleDestroyed(EventArgs e)
         {
-            F1Native.UnregisterHotKey(Handle, F1HotkeyId);
-            F1Native.UnregisterHotKey(Handle, F2HotkeyId);
-            F1Native.UnregisterHotKey(Handle, F3HotkeyId);
+            for (int id = F1HotkeyId; id <= ShiftF3HotkeyId; id++)
+                F1Native.UnregisterHotKey(Handle, id);
             base.OnHandleDestroyed(e);
         }
 
@@ -50,7 +81,7 @@ namespace WindowsFormsApp1
             if (m.Msg == F1Native.WM_HOTKEY)
             {
                 int id = m.WParam.ToInt32();
-                if (id == F1HotkeyId || id == F2HotkeyId || id == F3HotkeyId)
+                if (IsOurHotkey(id))
                 {
                     if (IsBlockedWindowActive())
                     {
@@ -60,6 +91,8 @@ namespace WindowsFormsApp1
                     if (id == F1HotkeyId) { var ignored = RunF1ScenarioAsync(); return; }
                     if (id == F2HotkeyId) { var ignored = RunF2ScenarioAsync(); return; }
                     if (id == F3HotkeyId) { var ignored = RunF3ScenarioAsync(); return; }
+                    var ignoredText = TypeTextAsync(ShiftTexts[FKeyNumber(id) - 1], HotkeyName(id));
+                    return;
                 }
             }
             base.WndProc(ref m);
@@ -69,7 +102,7 @@ namespace WindowsFormsApp1
         // Заголовок окна должен начинаться с указанного текста (регистр не важен).
         private static readonly string[] BlockedWindowTitles = { "Сеанс A", "Сеанс B", "Сеанс C", "Сеанс D" };
 
-        // true — в заблокированном окне F1/F2/F3 работают как обычные клавиши;
+        // true — в заблокированном окне F1/F2/F3 и Shift+F1/F2/F3 работают как обычные клавиши;
         // false — нажатие просто игнорируется.
         private static readonly bool PassKeyThroughWhenBlocked = true;
 
@@ -86,15 +119,15 @@ namespace WindowsFormsApp1
 
         // RegisterHotKey «съедает» клавишу, поэтому в заблокированном окне отправляем её заново:
         // на мгновение снимаем горячую клавишу, нажимаем F-клавишу и регистрируем снова.
+        // Для Shift+F-клавиш Shift физически зажат, поэтому окно получит именно Shift+F.
         private async Task PassKeyThroughAsync(int id)
         {
             if (!PassKeyThroughWhenBlocked) return;
 
-            uint vk = id == F1HotkeyId ? VK_F1 : id == F2HotkeyId ? VK_F2 : VK_F3;
             F1Native.UnregisterHotKey(Handle, id);
             try
             {
-                F1Keys.Press((ushort)vk, false);
+                F1Keys.Press((ushort)HotkeyVk(id), false);
                 await Task.Delay(100);
             }
             catch (Exception ex)
@@ -103,7 +136,37 @@ namespace WindowsFormsApp1
             }
             finally
             {
-                F1Native.RegisterHotKey(Handle, id, F1Native.MOD_NOREPEAT, vk);
+                F1Native.RegisterHotKey(Handle, id, HotkeyMods(id), HotkeyVk(id));
+            }
+        }
+
+        // Shift+F1/F2/F3: набирает готовый текст. Буфер обмена не используется (его не затираем).
+        private async Task TypeTextAsync(string text, string name)
+        {
+            if (_f1Busy) return;
+            _f1Busy = true;
+            try
+            {
+                // Ждём, пока пользователь отпустит Shift, иначе символы придут с зажатым Shift.
+                for (int i = 0; i < 30 && F1Native.IsShiftDown(); i++)
+                    await Task.Delay(50);
+
+                const int chunk = 8;
+                for (int pos = 0; pos < text.Length; pos += chunk)
+                {
+                    F1Keys.TypeUnicode(text.Substring(pos, Math.Min(chunk, text.Length - pos)));
+                    await Task.Delay(10);
+                }
+
+                ShowF1Status(name + ": текст введён");
+            }
+            catch (Exception ex)
+            {
+                ShowF1Status(ex.Message);
+            }
+            finally
+            {
+                _f1Busy = false;
             }
         }
 
@@ -266,20 +329,20 @@ namespace WindowsFormsApp1
         private const char Marker = '№';
         private const int TakeAfterMarker = 28;
 
-        // «Заявление» + «Номер приостанавливаемого распоряжения»: второй №, с 9-го символа 13 знаков.
+        // «Заявление» + «Номер приостанавливаемого распоряжения»: второй №, пропускаем 8, берём 13 знаков.
         private const int SuspendedOccurrence = 2;
         private const int SuspendedSkip = 8;
         private const int SuspendedLength = 13;
 
-        // Только «Заявление»: первый №, с 9-го символа 12 знаков.
+        // Только «Заявление»: первый №, пропускаем 9, берём 13 знаков.
         private const int StatementOccurrence = 1;
-        private const int StatementSkip = 8;
-        private const int StatementLength = 12;
+        private const int StatementSkip = 9;
+        private const int StatementLength = 13;
 
         // «Отзыв документа»: после «Номер счета плательщика» находим «BY»,
-        // начиная с «B» пропускаем 7 символов (т.е. с 8-го) и берём 13 знаков.
+        // начиная с «B» пропускаем 8 символов (т.е. с 9-го) и берём 13 знаков.
         private const string IbanPrefix = "BY";
-        private const int IbanSkip = 7;
+        private const int IbanSkip = 8;
         private const int IbanLength = 13;
 
         // ---------------------------------------------------------------------------
@@ -409,6 +472,27 @@ namespace WindowsFormsApp1
             Send(KeyInput(VK_CONTROL, F1Native.KEYEVENTF_KEYUP));
         }
 
+        /// <summary>Набор текста Unicode-символами (работает с любой раскладкой).</summary>
+        public static void TypeUnicode(string s)
+        {
+            var inputs = new F1Native.INPUT[s.Length * 2];
+            for (int i = 0; i < s.Length; i++)
+            {
+                inputs[i * 2] = UnicodeInput(s[i], F1Native.KEYEVENTF_UNICODE);
+                inputs[i * 2 + 1] = UnicodeInput(s[i], F1Native.KEYEVENTF_UNICODE | F1Native.KEYEVENTF_KEYUP);
+            }
+            Send(inputs);
+        }
+
+        private static F1Native.INPUT UnicodeInput(char c, uint flags)
+        {
+            var input = new F1Native.INPUT();
+            input.type = F1Native.INPUT_KEYBOARD;
+            input.U.ki.wScan = c;
+            input.U.ki.dwFlags = flags;
+            return input;
+        }
+
         /// <summary>Клик правой кнопкой мыши в текущей позиции курсора.</summary>
         public static void RightClick()
         {
@@ -457,13 +541,22 @@ namespace WindowsFormsApp1
         public const uint MOUSEEVENTF_RIGHTDOWN = 0x0008;
         public const uint MOUSEEVENTF_RIGHTUP = 0x0010;
         public const int WM_HOTKEY = 0x0312;
+        public const uint MOD_SHIFT = 0x0004;
         public const uint MOD_NOREPEAT = 0x4000;
+        public const uint KEYEVENTF_UNICODE = 0x0004;
 
         [DllImport("user32.dll")] public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
         [DllImport("user32.dll")] public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
         [DllImport("user32.dll")] public static extern uint GetClipboardSequenceNumber();
         [DllImport("user32.dll")] public static extern uint MapVirtualKey(uint uCode, uint uMapType);
+        [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int vKey);
         [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+
+        public static bool IsShiftDown()
+        {
+            return (GetAsyncKeyState(0x10) & 0x8000) != 0; // VK_SHIFT
+        }
+
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int maxCount);
 
