@@ -21,6 +21,8 @@ namespace WindowsFormsApp1
 
         private const int F2HotkeyId = 0xF2;
         private const uint VK_F2 = 0x71;
+        private const int F3HotkeyId = 0xF3;
+        private const uint VK_F3 = 0x72;
         private const int F7DelayMs = 300;    // пауза после F7, пока откроется окно/режим
 
         private bool _f1Busy;
@@ -32,12 +34,15 @@ namespace WindowsFormsApp1
                 ShowF1Status("Не удалось зарегистрировать F1 (занята другой программой)");
             if (!F1Native.RegisterHotKey(Handle, F2HotkeyId, F1Native.MOD_NOREPEAT, VK_F2))
                 ShowF1Status("Не удалось зарегистрировать F2 (занята другой программой)");
+            if (!F1Native.RegisterHotKey(Handle, F3HotkeyId, F1Native.MOD_NOREPEAT, VK_F3))
+                ShowF1Status("Не удалось зарегистрировать F3 (занята другой программой)");
         }
 
         protected override void OnHandleDestroyed(EventArgs e)
         {
             F1Native.UnregisterHotKey(Handle, F1HotkeyId);
             F1Native.UnregisterHotKey(Handle, F2HotkeyId);
+            F1Native.UnregisterHotKey(Handle, F3HotkeyId);
             base.OnHandleDestroyed(e);
         }
 
@@ -48,8 +53,42 @@ namespace WindowsFormsApp1
                 int id = m.WParam.ToInt32();
                 if (id == F1HotkeyId) { var ignored = RunF1ScenarioAsync(); return; }
                 if (id == F2HotkeyId) { var ignored = RunF2ScenarioAsync(); return; }
+                if (id == F3HotkeyId) { var ignored = RunF3ScenarioAsync(); return; }
             }
             base.WndProc(ref m);
+        }
+
+        // F3: F7, Tab x4, Ctrl+V, Tab x8, стрелка влево, Tab x3, Enter.
+        private async Task RunF3ScenarioAsync()
+        {
+            if (_f1Busy) return;
+            _f1Busy = true;
+            try
+            {
+                F1Keys.Press(F1Keys.VK_F7, false);
+                await Task.Delay(F7DelayMs);
+
+                await PressManyAsync(F1Keys.VK_TAB, false, 4);
+                await F1Keys.CtrlV();
+                await Task.Delay(StepDelayMs);
+
+                await PressManyAsync(F1Keys.VK_TAB, false, 8);
+                F1Keys.Press(F1Keys.VK_LEFT, true);
+                await Task.Delay(StepDelayMs);
+
+                await PressManyAsync(F1Keys.VK_TAB, false, 3);
+                F1Keys.Press(F1Keys.VK_RETURN, false);
+
+                ShowF1Status("F3: выполнено");
+            }
+            catch (Exception ex)
+            {
+                ShowF1Status(ex.Message);
+            }
+            finally
+            {
+                _f1Busy = false;
+            }
         }
 
         // F2: F7, Tab x3, Backspace, Tab x8, стрелка вправо, Tab x3, Enter.
@@ -212,18 +251,31 @@ namespace WindowsFormsApp1
         public const ushort VK_TAB = 0x09;
         public const ushort VK_F7 = 0x76;
         public const ushort VK_CONTROL = 0x11;
+        public const ushort VK_LEFT = 0x25;
         public const ushort VK_A = 0x41;
+        public const ushort VK_V = 0x56;
 
         /// <summary>Ctrl+A: выделить всё.</summary>
-        public static async Task CtrlA()
+        public static Task CtrlA()
+        {
+            return CtrlKey(VK_A);
+        }
+
+        /// <summary>Ctrl+V: вставить из буфера обмена.</summary>
+        public static Task CtrlV()
+        {
+            return CtrlKey(VK_V);
+        }
+
+        private static async Task CtrlKey(ushort vk)
         {
             // Клавиши отправляются по одной с паузами: многие приложения не успевают
-            // увидеть зажатый Ctrl, если Ctrl+A приходит одним пакетом.
+            // увидеть зажатый Ctrl, если комбинация приходит одним пакетом.
             Send(KeyInput(VK_CONTROL, 0));
             await Task.Delay(50);
-            Send(KeyInput(VK_A, 0));
+            Send(KeyInput(vk, 0));
             await Task.Delay(50);
-            Send(KeyInput(VK_A, F1Native.KEYEVENTF_KEYUP));
+            Send(KeyInput(vk, F1Native.KEYEVENTF_KEYUP));
             await Task.Delay(50);
             Send(KeyInput(VK_CONTROL, F1Native.KEYEVENTF_KEYUP));
         }
