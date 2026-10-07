@@ -42,7 +42,7 @@ namespace MultiTool.Views
             Cards.ItemsSource = new[]
             {
                 new HotkeyCard("F1", "Копирование и разбор",
-                    "Ctrl+A → ПКМ → ↓ → → → Enter, затем по типу документа из буфера берётся нужный номер."),
+                    "Ctrl+A → ПКМ → ↓ → → → Enter, затем по типу документа из буфера берётся нужный номер; для Accept сохраняется макрос."),
                 new HotkeyCard("F2", "Последовательность F2",
                     "F7 → Tab ×3 → Backspace → Tab ×8 → → → Tab ×3 → Enter."),
                 new HotkeyCard("F3", "Последовательность F3",
