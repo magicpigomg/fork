@@ -124,14 +124,21 @@ namespace MultiTool.Services
             Report(HotkeyKind.F1, result.Kind + ": " + result.Value, LogKind.Success);
         }
 
-        // ── F2: F7, Tab×3, Backspace, Tab×8, →, Tab×3, Enter ─────────────────────────────────
+        // ── F2: F7, Tab, «9», ←, Tab×2, Backspace, Tab×8, →, Tab×3, Enter ───────────────────
 
         private async Task RunF2Async(AppSettings s)
         {
             Press(VK_F7);
             await Task.Delay(s.F7DelayMs);
 
-            await PressManyAsync(VK_TAB, 3, s.StepDelayMs);
+            // Tab → «9» → ← → Tab ×2 → Backspace (вместе три Tab, как раньше, но с вводом девятки в середине)
+            Press(VK_TAB);
+            await Task.Delay(s.StepDelayMs);
+            Press(VK_9);
+            await Task.Delay(s.StepDelayMs);
+            Press(VK_LEFT, true);
+            await Task.Delay(s.StepDelayMs);
+            await PressManyAsync(VK_TAB, 2, s.StepDelayMs);
             Press(VK_BACK);
             await Task.Delay(s.StepDelayMs);
 
@@ -221,15 +228,3 @@ namespace MultiTool.Services
             finally
             {
                 _hotkeys.Resume(kind);
-            }
-        }
-
-        private static void Report(HotkeyKind kind, string message, LogKind logKind)
-        {
-            string source = HotkeyInfo.Name(kind);
-            ActivityLog.Add(source, message, logKind);
-            if (AppSettings.Current.ShowToasts)
-                ToastWindow.ShowToast(source, message, logKind);
-        }
-    }
-}
