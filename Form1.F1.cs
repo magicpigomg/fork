@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -51,11 +52,61 @@ namespace WindowsFormsApp1
             if (m.Msg == F1Native.WM_HOTKEY)
             {
                 int id = m.WParam.ToInt32();
-                if (id == F1HotkeyId) { var ignored = RunF1ScenarioAsync(); return; }
-                if (id == F2HotkeyId) { var ignored = RunF2ScenarioAsync(); return; }
-                if (id == F3HotkeyId) { var ignored = RunF3ScenarioAsync(); return; }
+                if (id == F1HotkeyId || id == F2HotkeyId || id == F3HotkeyId)
+                {
+                    if (IsBlockedWindowActive())
+                    {
+                        var ignoredPass = PassKeyThroughAsync(id);
+                        return;
+                    }
+                    if (id == F1HotkeyId) { var ignored = RunF1ScenarioAsync(); return; }
+                    if (id == F2HotkeyId) { var ignored = RunF2ScenarioAsync(); return; }
+                    if (id == F3HotkeyId) { var ignored = RunF3ScenarioAsync(); return; }
+                }
             }
             base.WndProc(ref m);
+        }
+
+        // Если активно одно из этих окон — сценарии не выполняются.
+        // Заголовок окна должен начинаться с указанного текста (регистр не важен).
+        private static readonly string[] BlockedWindowTitles = { "Сеанс A", "Сеанс B", "Сеанс C", "Сеанс D" };
+
+        // true — в заблокированном окне F1/F2/F3 работают как обычные клавиши;
+        // false — нажатие просто игнорируется.
+        private static readonly bool PassKeyThroughWhenBlocked = true;
+
+        private static bool IsBlockedWindowActive()
+        {
+            string title = F1Native.GetActiveWindowTitle();
+            foreach (string blocked in BlockedWindowTitles)
+            {
+                if (title.StartsWith(blocked, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        // RegisterHotKey «съедает» клавишу, поэтому в заблокированном окне отправляем её заново:
+        // на мгновение снимаем горячую клавишу, нажимаем F-клавишу и регистрируем снова.
+        private async Task PassKeyThroughAsync(int id)
+        {
+            if (!PassKeyThroughWhenBlocked) return;
+
+            uint vk = id == F1HotkeyId ? VK_F1 : id == F2HotkeyId ? VK_F2 : VK_F3;
+            F1Native.UnregisterHotKey(Handle, id);
+            try
+            {
+                F1Keys.Press((ushort)vk, false);
+                await Task.Delay(100);
+            }
+            catch (Exception ex)
+            {
+                ShowF1Status(ex.Message);
+            }
+            finally
+            {
+                F1Native.RegisterHotKey(Handle, id, F1Native.MOD_NOREPEAT, vk);
+            }
         }
 
         // F3: F7, Tab x4, Ctrl+V, Tab x8, стрелка влево, Tab x3, Enter.
@@ -334,6 +385,19 @@ namespace WindowsFormsApp1
         [DllImport("user32.dll")] public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
         [DllImport("user32.dll")] public static extern uint GetClipboardSequenceNumber();
         [DllImport("user32.dll")] public static extern uint MapVirtualKey(uint uCode, uint uMapType);
+        [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int maxCount);
+
+        /// <summary>Заголовок активного окна (пустая строка, если окна нет).</summary>
+        public static string GetActiveWindowTitle()
+        {
+            IntPtr hWnd = GetForegroundWindow();
+            if (hWnd == IntPtr.Zero) return "";
+            var sb = new StringBuilder(256);
+            GetWindowText(hWnd, sb, sb.Capacity);
+            return sb.ToString();
+        }
         [DllImport("user32.dll", SetLastError = true)]
         public static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 
