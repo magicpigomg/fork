@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -17,62 +16,14 @@ namespace WindowsFormsApp1
         private const int StepDelayMs = 100;  // пауза между нажатиями клавиш
         private const int ClipboardTimeoutMs = 2000;
 
+        // Какой по счёту символ № использовать: 1 — первый, 2 — второй и т.д.
+        private const int MarkerOccurrence = 1;
+
         private bool _f1Busy;
-        private NumericUpDown _f1Occurrence;
-
-        // Номер символа №, после которого берём текст (1 = первый). Хранится рядом с exe.
-        private static string F1OccurrenceFile
-        {
-            get { return Path.Combine(Application.StartupPath, "f1_marker.txt"); }
-        }
-
-        // Поле «Номер №» добавляется на форму кодом в левый нижний угол.
-        // Если оно перекрывает ваши элементы — поменяйте Location.
-        private void CreateF1OccurrenceControl()
-        {
-            if (_f1Occurrence != null) return;
-
-            var label = new Label
-            {
-                Text = "Номер №:",
-                AutoSize = true,
-                Location = new System.Drawing.Point(10, ClientSize.Height - 26),
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Left
-            };
-            _f1Occurrence = new NumericUpDown
-            {
-                Minimum = 1,
-                Maximum = 99,
-                Value = 1,
-                Width = 50,
-                Location = new System.Drawing.Point(75,ClientSize.Height - 29),
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Left
-            };
-
-            try
-            {
-                int saved;
-                if (File.Exists(F1OccurrenceFile) && int.TryParse(File.ReadAllText(F1OccurrenceFile).Trim(), out saved))
-                    _f1Occurrence.Value = Math.Max(1, Math.Min(99, saved));
-            }
-            catch { /* файл не прочитался — остаётся 1 */ }
-
-            _f1Occurrence.ValueChanged += delegate
-            {
-                try { File.WriteAllText(F1OccurrenceFile, _f1Occurrence.Value.ToString()); }
-                catch { }
-            };
-
-            Controls.Add(label);
-            Controls.Add(_f1Occurrence);
-            label.BringToFront();
-            _f1Occurrence.BringToFront();
-        }
 
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            CreateF1OccurrenceControl();
             if (!F1Native.RegisterHotKey(Handle, F1HotkeyId, F1Native.MOD_NOREPEAT, VK_F1))
                 ShowF1Status("Не удалось зарегистрировать F1 (занята другой программой)");
         }
@@ -138,7 +89,7 @@ namespace WindowsFormsApp1
                 if (!Clipboard.ContainsText()) { ShowF1Status("В буфере нет текста"); return; }
 
                 string result, error;
-                if (!F1ClipboardProcessor.TryExtract(Clipboard.GetText(), (int)_f1Occurrence.Value, out result, out error))
+                if (!F1ClipboardProcessor.TryExtract(Clipboard.GetText(), MarkerOccurrence, out result, out error))
                 {
                     ShowF1Status(error);
                     return;
