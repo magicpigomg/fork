@@ -26,6 +26,12 @@ namespace MultiTool.Services
     {
         private const char Marker = '№';
 
+        /// <summary>Документ Accept: есть и «Отзыв документа», и «Заявление на акцепт» (проверяется раньше остальных правил).</summary>
+        public static bool IsAcceptDocument(string text, AppSettings s)
+        {
+            return Matches(text, s.RevocationKeyword) && Matches(text, s.AcceptKeyword);
+        }
+
         public static ExtractResult Extract(string text, AppSettings s)
         {
             if (Matches(text, s.RevocationKeyword))
