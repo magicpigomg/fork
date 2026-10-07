@@ -95,6 +95,12 @@ namespace MultiTool.Models
         public int AcceptNumberLine { get; set; } = 16;             // номер акцепта (с обрезкой пробелов)
         public int AcceptNumberSkip { get; set; } = 6;
 
+        /// <summary>Документ считается Accept, если в нём есть и «Отзыв документа», и эта фраза (F1 запускает формирование макроса).</summary>
+        public string AcceptKeyword { get; set; } = "Заявление на акцепт";
+        /// <summary>true — при каждом сохранении открывается окно выбора файла; false — файл пишется в AcceptSavePath.</summary>
+        public bool AcceptAskPath { get; set; } = true;
+        public string AcceptSavePath { get; set; } = "";
+
         public string AcceptInputDateFormat { get; set; } = "dd.MM.yyyy";
         public string AcceptOutputDateFormat { get; set; } = "ddMMyy";
         public string AcceptFolder { get; set; } = "";              // папка по умолчанию в окне сохранения
