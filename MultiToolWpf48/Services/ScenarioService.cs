@@ -228,3 +228,15 @@ namespace MultiTool.Services
             finally
             {
                 _hotkeys.Resume(kind);
+            }
+        }
+
+        private static void Report(HotkeyKind kind, string message, LogKind logKind)
+        {
+            string source = HotkeyInfo.Name(kind);
+            ActivityLog.Add(source, message, logKind);
+            if (AppSettings.Current.ShowToasts)
+                ToastWindow.ShowToast(source, message, logKind);
+        }
+    }
+}
