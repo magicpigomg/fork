@@ -1,0 +1,79 @@
+<UserControl x:Class="MultiTool.Views.ToolsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="0,0,6,28">
+
+            <!-- Очистка пробелов (бывшая Form2) -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="Очистка пробелов" Style="{StaticResource SectionTitle}"/>
+                    <TextBlock Text="Убирает обычные и неразрывные пробелы и копирует результат в буфер обмена."
+                               Style="{StaticResource Muted}" Margin="0,4,0,16"/>
+
+                    <TextBlock Text="Исходный текст" Style="{StaticResource FieldLabel}"/>
+                    <TextBox x:Name="SpacesInput" Style="{StaticResource MonoTextBox}" Height="84" AcceptsReturn="True"
+                             TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"/>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <Button Content="Очистить и скопировать" Style="{StaticResource PrimaryButton}" Click="OnCleanSpaces"/>
+                        <TextBlock x:Name="SpacesStatus" Style="{StaticResource Muted}" VerticalAlignment="Center"
+                                   Margin="14,0,0,0"/>
+                    </StackPanel>
+
+                    <TextBlock Text="Результат" Style="{StaticResource FieldLabel}" Margin="2,16,0,6"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="SpacesOutput" Style="{StaticResource MonoTextBox}" IsReadOnly="True"/>
+                        <Button Grid.Column="1" Content="Копировать" Margin="8,0,0,0" Click="OnCopySpaces"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Разбор номера (бывшая Form3) -->
+            <Border Style="{StaticResource Card}" Margin="0,16,0,0">
+                <StackPanel>
+                    <TextBlock Text="Разбор номера" Style="{StaticResource SectionTitle}"/>
+                    <TextBlock x:Name="NumberHint" Style="{StaticResource Muted}" Margin="0,4,0,16"/>
+
+                    <TextBlock Text="Исходный номер" Style="{StaticResource FieldLabel}"/>
+                    <TextBox x:Name="NumberInput" Style="{StaticResource MonoTextBox}"/>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <Button Content="Разобрать" Style="{StaticResource PrimaryButton}" Click="OnParseNumber"/>
+                        <TextBlock x:Name="NumberStatus" Style="{StaticResource Muted}" VerticalAlignment="Center"
+                                   Margin="14,0,0,0"/>
+                    </StackPanel>
+
+                    <Grid Margin="0,18,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="170"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock x:Name="Label1" Grid.Row="0" VerticalAlignment="Center" Margin="2,0,12,10" Foreground="{StaticResource MutedBrush}"/>
+                        <TextBox x:Name="Result1" Grid.Row="0" Grid.Column="1" Style="{StaticResource MonoTextBox}" IsReadOnly="True" Margin="0,0,0,10"/>
+                        <Button Grid.Row="0" Grid.Column="2" Content="Копировать" Margin="8,0,0,10" Tag="1" Click="OnCopyResult"/>
+
+                        <TextBlock x:Name="Label2" Grid.Row="1" VerticalAlignment="Center" Margin="2,0,12,10" Foreground="{StaticResource MutedBrush}"/>
+                        <TextBox x:Name="Result2" Grid.Row="1" Grid.Column="1" Style="{StaticResource MonoTextBox}" IsReadOnly="True" Margin="0,0,0,10"/>
+                        <Button Grid.Row="1" Grid.Column="2" Content="Копировать" Margin="8,0,0,10" Tag="2" Click="OnCopyResult"/>
+
+                        <TextBlock x:Name="Label3" Grid.Row="2" VerticalAlignment="Center" Margin="2,0,12,0" Foreground="{StaticResource MutedBrush}"/>
+                        <TextBox x:Name="Result3" Grid.Row="2" Grid.Column="1" Style="{StaticResource MonoTextBox}" IsReadOnly="True"/>
+                        <Button Grid.Row="2" Grid.Column="2" Content="Копировать" Margin="8,0,0,0" Tag="3" Click="OnCopyResult"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

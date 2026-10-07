@@ -1,0 +1,59 @@
+<UserControl x:Class="MultiTool.Views.FilesView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="0,0,6,28">
+
+            <!-- Приостановление (бывшая button4) -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="Файлы приостановления" Style="{StaticResource SectionTitle}"/>
+                    <TextBlock Text="Создаёт файл с датой и файл макроса приостановления. Шаблоны и пути меняются в настройках."
+                               Style="{StaticResource Muted}" Margin="0,4,0,16"/>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Text="Сегодняшняя дата" Style="{StaticResource FieldLabel}" Margin="2,0,24,10"/>
+                        <TextBlock x:Name="DateValue" Grid.Column="1" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold"
+                                   Foreground="{StaticResource AccentBrush}" Margin="0,-1,0,10"/>
+
+                        <TextBlock Text="Файл с датой" Style="{StaticResource FieldLabel}" Grid.Row="1" Margin="2,0,24,10"/>
+                        <TextBlock x:Name="DatePathText" Grid.Row="1" Grid.Column="1" TextTrimming="CharacterEllipsis" Margin="0,-1,0,10"/>
+
+                        <TextBlock Text="Файл макроса" Style="{StaticResource FieldLabel}" Grid.Row="2" Margin="2,0,24,0"/>
+                        <TextBlock x:Name="ScriptPathText" Grid.Row="2" Grid.Column="1" TextTrimming="CharacterEllipsis" Margin="0,-1,0,0"/>
+                    </Grid>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,18,0,0">
+                        <Button Content="Создать файлы" Style="{StaticResource PrimaryButton}" Click="OnCreateFiles"/>
+                        <TextBlock x:Name="FilesStatus" Style="{StaticResource Muted}" VerticalAlignment="Center"
+                                   Margin="14,0,0,0"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Accept (бывшая button8) -->
+            <Border Style="{StaticResource Card}" Margin="0,16,0,0">
+                <StackPanel>
+                    <TextBlock Text="Accept" Style="{StaticResource SectionTitle}"/>
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,4,0,0"
+                               Text="Скопируйте документ в буфер обмена и нажмите кнопку: в буфер попадёт строка «ОТЗЫВ …», а макрос !accept.mac сохранится туда, куда укажете. Номера строк и шаблон — в настройках."/>
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                        <Button Content="Создать Accept" Style="{StaticResource PrimaryButton}" Click="OnCreateAccept"/>
+                        <TextBlock x:Name="AcceptStatus" Style="{StaticResource Muted}" VerticalAlignment="Center"
+                                   Margin="14,0,0,0"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
