@@ -132,7 +132,13 @@ namespace MultiTool.Views
             a2.Children.Add(Text("Формат даты в документе", nameof(AppSettings.AcceptInputDateFormat), 200));
             a2.Children.Add(Text("Формат даты в макросе", nameof(AppSettings.AcceptOutputDateFormat), 200));
             accept.Children.Add(a2);
-            accept.Children.Add(PathField("Папка по умолчанию в окне сохранения (необязательно)", nameof(AppSettings.AcceptFolder)));
+            accept.Children.Add(Subtitle("Когда формируется Accept по F1"));
+            accept.Children.Add(Row(Text("Признак (вместе с «Отзыв документа»)", nameof(AppSettings.AcceptKeyword), 330)));
+
+            accept.Children.Add(Subtitle("Куда сохранять файл"));
+            accept.Children.Add(Switch("Спрашивать путь при каждом сохранении (окно «Сохранить как»)", nameof(AppSettings.AcceptAskPath)));
+            accept.Children.Add(PathField("Папка по умолчанию в окне «Сохранить как» (необязательно)", nameof(AppSettings.AcceptFolder)));
+            accept.Children.Add(PathField("Постоянный файл — используется, когда запрос пути выключен", nameof(AppSettings.AcceptSavePath)));
             accept.Children.Add(Multiline(
                 "Шаблон макроса !accept.mac (подстановки: {PayerAccount} {DateAccept} {NumberContract} {YnpBen} {DateDoc} {NumberAccept})",
                 nameof(AppSettings.AcceptTemplate), 260, mono: true));
