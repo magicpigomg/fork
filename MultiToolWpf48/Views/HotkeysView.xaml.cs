@@ -44,7 +44,7 @@ namespace MultiTool.Views
                 new HotkeyCard("F1", "Копирование и разбор",
                     "Ctrl+A → ПКМ → ↓ → → → Enter, затем по типу документа из буфера берётся нужный номер; для Accept сохраняется макрос."),
                 new HotkeyCard("F2", "Последовательность F2",
-                    "F7 → Tab ×3 → Backspace → Tab ×8 → → → Tab ×3 → Enter."),
+                    "F7 → Tab → 9 → ← → Tab ×2 → Backspace → Tab ×8 → → → Tab ×3 → Enter."),
                 new HotkeyCard("F3", "Последовательность F3",
                     "F7 → Tab ×4 → Ctrl+V → Tab ×8 → ← → Tab ×3 → Enter."),
                 new HotkeyCard("Shift+F1", "Ввод текста", s.ShiftText1),
