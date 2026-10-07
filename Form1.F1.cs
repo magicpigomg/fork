@@ -19,6 +19,10 @@ namespace WindowsFormsApp1
         // Какой по счёту символ № использовать: 1 — первый, 2 — второй и т.д.
         private const int MarkerOccurrence = 1;
 
+        private const int F2HotkeyId = 0xF2;
+        private const uint VK_F2 = 0x71;
+        private const int F7DelayMs = 300;    // пауза после F7, пока откроется окно/режим
+
         private bool _f1Busy;
 
         protected override void OnHandleCreated(EventArgs e)
@@ -26,22 +30,68 @@ namespace WindowsFormsApp1
             base.OnHandleCreated(e);
             if (!F1Native.RegisterHotKey(Handle, F1HotkeyId, F1Native.MOD_NOREPEAT, VK_F1))
                 ShowF1Status("Не удалось зарегистрировать F1 (занята другой программой)");
+            if (!F1Native.RegisterHotKey(Handle, F2HotkeyId, F1Native.MOD_NOREPEAT, VK_F2))
+                ShowF1Status("Не удалось зарегистрировать F2 (занята другой программой)");
         }
 
         protected override void OnHandleDestroyed(EventArgs e)
         {
             F1Native.UnregisterHotKey(Handle, F1HotkeyId);
+            F1Native.UnregisterHotKey(Handle, F2HotkeyId);
             base.OnHandleDestroyed(e);
         }
 
         protected override void WndProc(ref Message m)
         {
-            if (m.Msg == F1Native.WM_HOTKEY && m.WParam.ToInt32() == F1HotkeyId)
+            if (m.Msg == F1Native.WM_HOTKEY)
             {
-                var ignored = RunF1ScenarioAsync();
-                return;
+                int id = m.WParam.ToInt32();
+                if (id == F1HotkeyId) { var ignored = RunF1ScenarioAsync(); return; }
+                if (id == F2HotkeyId) { var ignored = RunF2ScenarioAsync(); return; }
             }
             base.WndProc(ref m);
+        }
+
+        // F2: F7, Tab x3, Backspace, Tab x8, стрелка вправо, Tab x3, Enter.
+        private async Task RunF2ScenarioAsync()
+        {
+            if (_f1Busy) return;
+            _f1Busy = true;
+            try
+            {
+                F1Keys.Press(F1Keys.VK_F7, false);
+                await Task.Delay(F7DelayMs);
+
+                await PressManyAsync(F1Keys.VK_TAB, false, 3);
+                F1Keys.Press(F1Keys.VK_BACK, false);
+                await Task.Delay(StepDelayMs);
+
+                await PressManyAsync(F1Keys.VK_TAB, false, 8);
+                F1Keys.Press(F1Keys.VK_RIGHT, true);
+                await Task.Delay(StepDelayMs);
+
+                await PressManyAsync(F1Keys.VK_TAB, false, 3);
+                F1Keys.Press(F1Keys.VK_RETURN, false);
+
+                ShowF1Status("F2: выполнено");
+            }
+            catch (Exception ex)
+            {
+                ShowF1Status(ex.Message);
+            }
+            finally
+            {
+                _f1Busy = false;
+            }
+        }
+
+        private static async Task PressManyAsync(ushort vk, bool extended, int count)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                F1Keys.Press(vk, extended);
+                await Task.Delay(StepDelayMs);
+            }
         }
 
         private async Task RunF1ScenarioAsync()
@@ -158,6 +208,9 @@ namespace WindowsFormsApp1
         public const ushort VK_RETURN = 0x0D;
         public const ushort VK_RIGHT = 0x27;
         public const ushort VK_DOWN = 0x28;
+        public const ushort VK_BACK = 0x08;
+        public const ushort VK_TAB = 0x09;
+        public const ushort VK_F7 = 0x76;
         public const ushort VK_CONTROL = 0x11;
         public const ushort VK_A = 0x41;
 
