@@ -3,7 +3,6 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using Microsoft.Win32;
 using MultiTool.Models;
 using MultiTool.Services;
 
@@ -39,72 +38,24 @@ namespace MultiTool.Views
 
         private async void OnCreateAccept(object sender, RoutedEventArgs e)
         {
-            AppSettings s = AppSettings.Current;
-
             string text = await ClipboardHelper.GetTextAsync();
             if (string.IsNullOrWhiteSpace(text))
             {
-                FailAccept("Буфер обмена пуст: скопируйте документ и повторите");
+                FinishAccept(new AcceptOutcome(Services.AcceptStatus.Failed, "Буфер обмена пуст: скопируйте документ и повторите"));
                 return;
             }
 
-            AcceptFields fields;
-            string error;
-            if (!AcceptService.TryParse(text, s, out fields, out error))
-            {
-                FailAccept("Документ пустой либо неверные значения: " + error);
-                return;
-            }
-
-            // Как и раньше, в буфер сразу кладётся строка «ОТЗЫВ …», даже если дальше что-то пойдёт не так.
-            if (!await ClipboardHelper.SetTextAsync(fields.TitleLine))
-            {
-                FailAccept("Буфер обмена занят другой программой");
-                return;
-            }
-
-            string macro;
-            if (!AcceptService.TryBuildMacro(fields, s, out macro, out error))
-            {
-                FailAccept("Не удаётся преобразовать дату: " + error);
-                return;
-            }
-
-            var dialog = new SaveFileDialog
-            {
-                Filter = "Текстовые файлы (*.mac)|*.mac",
-                DefaultExt = ".mac",
-                FileName = "!accept",
-                Title = "Сохранить файл !accept.mac",
-                OverwritePrompt = false
-            };
-            if (Directory.Exists(s.AcceptFolder)) dialog.InitialDirectory = s.AcceptFolder;
-
-            if (dialog.ShowDialog() != true)
-            {
-                Show(AcceptStatus, true, "Сохранение отменено. В буфере: " + fields.TitleLine);
-                return;
-            }
-
-            try
-            {
-                File.WriteAllText(dialog.FileName, macro, FileGenerator.GetEncoding(s));
-            }
-            catch (Exception ex)
-            {
-                FailAccept("Не удалось сохранить файл: " + ex.Message);
-                return;
-            }
-
-            string message = "Сохранено: " + dialog.FileName + ". В буфере: " + fields.TitleLine;
-            Show(AcceptStatus, true, message);
-            ActivityLog.Add("Accept", message, LogKind.Success);
+            FinishAccept(await AcceptWorkflow.RunAsync(text, AppSettings.Current, Window.GetWindow(this)));
         }
 
-        private void FailAccept(string message)
+        private void FinishAccept(AcceptOutcome outcome)
         {
-            Show(AcceptStatus, false, message);
-            ActivityLog.Add("Accept", message, LogKind.Error);
+            bool failed = outcome.Status == Services.AcceptStatus.Failed;
+            Show(AcceptResultText, !failed, outcome.Message);
+            LogKind kind = outcome.Status == Services.AcceptStatus.Saved ? LogKind.Success
+                         : outcome.Status == Services.AcceptStatus.Cancelled ? LogKind.Info
+                         : LogKind.Error;
+            ActivityLog.Add("Accept", outcome.Message, kind);
         }
 
         private void Show(TextBlock target, bool success, string message)
