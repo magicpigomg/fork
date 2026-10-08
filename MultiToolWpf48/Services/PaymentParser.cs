@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace MultiTool.Services
@@ -57,11 +58,23 @@ namespace MultiTool.Services
 
         private static readonly Regex AmountLineRx = new Regex(@"^\d[\d  ,\.]*\s*[A-Za-z]{3}$", Opt);
         private static readonly Regex SwiftRx = new Regex(@"^[A-Za-z]{6}[A-Za-z0-9]{2}([A-Za-z0-9]{3})?$", Opt);
-        private static readonly Regex AccountRx = new Regex(@"^[A-Za-z0-9 ]{5,}$", Opt);
+        // Счёт на сайте: буквы/цифры, возможны пробелы (в том числе неразрывные) и дефисы; обязательно есть цифра.
+        private static readonly Regex AccountRx = new Regex(@"^(?=.*\d)[A-Za-z0-9][A-Za-z0-9  \-]{4,}$", Opt);
         private static readonly Regex TnvedRx = new Regex(@"^\d[\d,; ]*\d$", Opt);
         private static readonly Regex RegNumberRx = new Regex(@"^(?=.*\d)[\w/.\-]{5,}$", Opt);
         private static readonly Regex CyrillicRx = new Regex(@"[А-Яа-яЁё]", Opt);
         private static readonly Regex LatinRx = new Regex(@"[A-Za-z]", Opt);
+
+        // Длины IBAN по странам: нужны, чтобы после разбитого пробелами номера не прихватить соседние цифры.
+        private static readonly Dictionary<string, int> IbanLengths = new Dictionary<string, int>
+        {
+            { "BY", 28 }, { "TR", 26 }, { "RU", 33 }, { "UA", 29 }, { "KZ", 20 }, { "GE", 22 }, { "AZ", 28 },
+            { "DE", 22 }, { "FR", 27 }, { "GB", 22 }, { "IT", 27 }, { "ES", 24 }, { "PL", 28 }, { "LT", 20 },
+            { "LV", 21 }, { "EE", 20 }, { "CY", 28 }, { "AE", 23 }, { "CH", 21 }, { "NL", 18 }, { "AT", 20 },
+            { "BE", 16 }, { "BG", 22 }, { "CZ", 24 }, { "HU", 28 }, { "IL", 23 }, { "MD", 24 }, { "RS", 22 },
+            { "SA", 24 }, { "SK", 24 }, { "SI", 19 }, { "SE", 24 }, { "FI", 18 }, { "DK", 18 }, { "NO", 15 },
+            { "PT", 25 }, { "GR", 27 }, { "IE", 22 }, { "LU", 20 }, { "MT", 31 }, { "RO", 24 }, { "HR", 21 }
+        };
 
         // Подписи полей на странице сайта: по ним понимаем, где заканчивается значение.
         private static readonly HashSet<string> SiteLabels = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -101,6 +114,10 @@ namespace MultiTool.Services
             int recipientStart = recipient >= 0 ? recipient : (payerLabel >= 0 ? payerLabel + 1 : 0);
             int recipientLabel = IndexOfLabel(lines, "^Счет$", recipientStart);
             f.RecipientAccount = ValueAt(lines, recipientLabel, v => AccountRx.IsMatch(v));
+
+            // Пробелы внутри номера счёта не значимы: «BY00 ALFA 0000 …» = «BY00ALFA0000…».
+            f.Account = NormalizeAccount(f.Account);
+            f.RecipientAccount = NormalizeAccount(f.RecipientAccount);
 
             // Получатель: имя, адрес, страна — через запятую.
             if (recipient >= 0)
@@ -184,14 +201,20 @@ namespace MultiTool.Services
 
             // «Счет №»: до слова «Бенефициар» — плательщик, после — получатель.
             int beneficiary = FirstIndex(t, @"Бенефициар");
-            var accountRx = new Regex(@"Счет[ \t]*№[ \t]*:?[ \t]*([A-Za-z0-9]{5,})", Opt);
-            List<Match> accounts = accountRx.Matches(t).Cast<Match>().ToList();
-            foreach (Match m in accounts)
+            // После «Счет №» берём остаток строки и разбираем его: номер может содержать дефисы и быть разбит пробелами.
+            var accountRx = new Regex(@"Счет[ \t]*№[ \t]*:?[ \t]*([^\n]*)", Opt);
+            var accounts = new List<KeyValuePair<int, string>>();
+            foreach (Match m in accountRx.Matches(t))
             {
-                bool isPayer = beneficiary < 0 ? ReferenceEquals(m, accounts[0]) : m.Index < beneficiary;
-                if (isPayer && f.Account == null) f.Account = m.Groups[1].Value;
-                else if (!isPayer && f.RecipientAccount == null && (beneficiary < 0 || m.Index > beneficiary))
-                    f.RecipientAccount = m.Groups[1].Value;
+                string account = ParseAccountText(m.Groups[1].Value);
+                if (account != null) accounts.Add(new KeyValuePair<int, string>(m.Index, account));
+            }
+            for (int i = 0; i < accounts.Count; i++)
+            {
+                bool isPayer = beneficiary < 0 ? i == 0 : accounts[i].Key < beneficiary;
+                if (isPayer && f.Account == null) f.Account = accounts[i].Value;
+                else if (!isPayer && f.RecipientAccount == null && (beneficiary < 0 || accounts[i].Key > beneficiary))
+                    f.RecipientAccount = accounts[i].Value;
             }
 
             // Получатель — всё между «Бенефициар:» и «Счет №» (в документе он может занимать несколько строк).
@@ -311,6 +334,48 @@ namespace MultiTool.Services
                 return isValid(lines[i]) ? lines[i] : null;
             }
             return null;
+        }
+
+        /// <summary>Убирает пробелы (в том числе неразрывные) из номера счёта; дефисы остаются.</summary>
+        private static string NormalizeAccount(string account)
+        {
+            return string.IsNullOrEmpty(account) ? account : Regex.Replace(account, @"\s+", "");
+        }
+
+        /// <summary>
+        /// Номер счёта из остатка строки после «Счет №». Допускаются дефисы и разбивка пробелами
+        /// («BY00 ALFA 0000 …»). Чтобы не прихватить следующее слово («… SWIFT»), после того как номер набрал
+        /// нормальную длину, лишние буквенные группы отбрасываются, а длина ограничена.
+        /// </summary>
+        private static string ParseAccountText(string rest)
+        {
+            string[] tokens = rest.Replace(' ', ' ').Split(new[] { ' ', '\t', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+            var sb = new StringBuilder();
+            int alnum = 0;
+            bool isIban = false;
+            int expected = 0; // точная длина IBAN для страны, если она известна
+
+            foreach (string token in tokens)
+            {
+                if (!Regex.IsMatch(token, @"^[A-Za-z0-9\-]+$")) break; // кириллица, двоеточие и т.п. — номер закончился
+
+                int length = token.Count(char.IsLetterOrDigit);
+                if (alnum == 0)
+                {
+                    isIban = Regex.IsMatch(token, @"^[A-Za-z]{2}\d{2}");
+                    if (isIban) IbanLengths.TryGetValue(token.Substring(0, 2).ToUpperInvariant(), out expected);
+                }
+                int maxLength = expected > 0 ? expected : (isIban ? 34 : 30);
+
+                if (alnum > 0 && alnum >= maxLength) break;
+                if (alnum > 0 && expected > 0 && alnum + length > expected) break; // это уже не часть номера (например, БИК)
+                if (alnum >= 12 && !token.Any(char.IsDigit)) break; // «SWIFT» и т.п. после готового номера
+                sb.Append(token);
+                alnum += length;
+            }
+
+            string account = sb.ToString().Trim('-');
+            return alnum >= 5 && account.Any(char.IsDigit) ? account : null;
         }
 
         private static bool IsNotLabel(string value)
