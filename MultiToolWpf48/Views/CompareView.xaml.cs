@@ -107,7 +107,7 @@ namespace MultiTool.Views
             FieldsGrid.Children.Clear();
             FieldsGrid.RowDefinitions.Clear();
             FieldsGrid.ColumnDefinitions.Clear();
-            FieldsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
+            FieldsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(138) });
             FieldsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             FieldsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             FieldsGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -227,6 +227,8 @@ namespace MultiTool.Views
                     Text = verdictText,
                     FontSize = 12,
                     FontWeight = FontWeights.SemiBold,
+                    TextWrapping = TextWrapping.Wrap,
+                    MaxWidth = 170,
                     Foreground = (Brush)FindResource(verdict == Verdict.Match ? "SuccessBrush"
                         : verdict == Verdict.Mismatch ? "DangerBrush"
                         : verdict == Verdict.Warning ? "WarnBrush" : "MutedBrush")
@@ -243,10 +245,10 @@ namespace MultiTool.Views
             var block = new TextBlock
             {
                 FontFamily = (FontFamily)FindResource("MonoFont"),
-                FontSize = 12.5,
+                FontSize = 12,
                 TextWrapping = TextWrapping.Wrap,
                 VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(6, 5, 10, 5)
+                Margin = new Thickness(6, 5, 8, 5)
             };
 
             if (string.IsNullOrEmpty(value))
