@@ -24,6 +24,25 @@ namespace MultiTool.Models
             "[left]\n" +
             "[left]";
 
+        /// <summary>
+        /// Макрос из полей платежа. Подстановки: {Country} — код страны (символы BIC), {RecipientAccount} — счёт получателя
+        /// без пробелов, {RecipientName} — наименование получателя (не длиннее 140), {Bic} — BIC банка получателя
+        /// (8 символов дополняются «XXX»).
+        /// </summary>
+        public const string PaymentMacro =
+            "Description =\n" +
+            "[tab field]\n" +
+            "\"{Country}\n" +
+            "[tab field]\n" +
+            "\"{RecipientAccount}\n" +
+            "[tab field]\n" +
+            "\"{RecipientName}\n" +
+            "[pf5]\n" +
+            "[tab field]\n" +
+            "[tab field]\n" +
+            "\"{Bic}\n" +
+            "[pf5]";
+
         public const string PriostanovlenieScript =
             "Description =\n" +
             "[home]\n" +
