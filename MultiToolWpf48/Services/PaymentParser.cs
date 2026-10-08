@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
 
 namespace MultiTool.Services
@@ -9,9 +8,13 @@ namespace MultiTool.Services
     /// <summary>Значения платежа, вытащенные из большого текста. Отсутствующее значение = null.</summary>
     public sealed class PaymentFields
     {
+        public string Number { get; set; }            // номер платежа / платёжного поручения
+        public string Date { get; set; }              // дата ПП
         public string Account { get; set; }           // счёт плательщика
         public string Amount { get; set; }            // сумма платежа с валютой
+        public string Recipient { get; set; }         // получатель: имя, адрес, страна
         public string RecipientAccount { get; set; }  // счёт получателя
+        public string RecipientBank { get; set; }     // банк получателя: страна и название, адрес
         public string Swift { get; set; }             // SWIFT-код банка получателя
         public string Tnved { get; set; }             // ТНВЭД (может отсутствовать)
         public string RegNumber { get; set; }         // рег. № валютного договора (может отсутствовать)
@@ -20,7 +23,10 @@ namespace MultiTool.Services
         /// <summary>Значения в порядке PaymentFieldInfo.Names.</summary>
         public string[] ToArray()
         {
-            return new[] { Account, Amount, RecipientAccount, Swift, Tnved, RegNumber, PurposeEn };
+            return new[]
+            {
+                Number, Date, Account, Amount, Recipient, RecipientAccount, RecipientBank, Swift, Tnved, RegNumber, PurposeEn
+            };
         }
 
         public int FoundCount
@@ -33,11 +39,12 @@ namespace MultiTool.Services
     {
         public static readonly string[] Names =
         {
-            "Счёт", "Сумма платежа", "Счёт получателя", "SWIFT-код банка", "ТНВЭД", "Рег. №", "Назначение (англ.)"
+            "№ платежа (ПП)", "Дата ПП", "Счёт", "Сумма платежа", "Получатель", "Счёт получателя",
+            "Банк получателя", "SWIFT-код банка", "ТНВЭД", "Рег. №", "Назначение (англ.)"
         };
 
         /// <summary>Поля, которых в документе может не быть.</summary>
-        public static readonly bool[] Optional = { false, false, false, false, true, true, false };
+        public static readonly bool[] Optional = { false, false, false, false, false, false, false, false, true, true, false };
     }
 
     /// <summary>
@@ -73,7 +80,16 @@ namespace MultiTool.Services
         public static PaymentFields ParseSite(string text)
         {
             List<string> lines = SplitLines(text);
+            string t = Normalize(text);
             var f = new PaymentFields();
+
+            // «Детализация платежа № 5663» и «Дата ПП 08.10.2026» (значение может быть и на следующей строке).
+            Match number = Regex.Match(t, @"Детализация[ \t]+платежа[ \t]*№[ \t]*(\d[\w/\-]*)", Opt);
+            if (number.Success) f.Number = number.Groups[1].Value;
+
+            // \s в .NET включает неразрывный пробел и перенос строки; допускаем и двоеточие после метки.
+            Match date = Regex.Match(t, @"Дата\s+ПП\s*:?\s*(\d{1,2}\.\d{1,2}\.\d{4})", Opt);
+            if (date.Success) f.Date = date.Groups[1].Value;
 
             // Первый «Счет» — счёт отправителя, «Счет» после блока «Получатель» — счёт получателя.
             int sender = IndexOfLabel(lines, "^Отправитель$", 0);
@@ -85,6 +101,25 @@ namespace MultiTool.Services
             int recipientStart = recipient >= 0 ? recipient : (payerLabel >= 0 ? payerLabel + 1 : 0);
             int recipientLabel = IndexOfLabel(lines, "^Счет$", recipientStart);
             f.RecipientAccount = ValueAt(lines, recipientLabel, v => AccountRx.IsMatch(v));
+
+            // Получатель: имя, адрес, страна — через запятую.
+            if (recipient >= 0)
+            {
+                string name = ValueAt(lines, recipient, IsNotLabel);
+                string address = ValueAt(lines, IndexOfLabel(lines, "^Адрес$", recipient), IsNotLabel);
+                string country = ValueAt(lines, IndexOfLabel(lines, @"^Страна\s+Получателя$", recipient), IsNotLabel);
+                f.Recipient = JoinNonEmpty(", ", name, address, country);
+            }
+
+            // Банк получателя: «страна банка пробел банк-получатель», затем через запятую адрес банка.
+            int bankLabel = IndexOfLabel(lines, @"^Банк[\s\-]*получатель$", 0);
+            if (bankLabel >= 0)
+            {
+                string bank = ValueAt(lines, bankLabel, IsNotLabel);
+                string bankCountry = ValueAt(lines, IndexOfLabel(lines, @"^Страна\s+Банка$", bankLabel), IsNotLabel);
+                string bankAddress = ValueAt(lines, IndexOfLabel(lines, @"^Адрес\s+Банка$", bankLabel), IsNotLabel);
+                f.RecipientBank = JoinNonEmpty(", ", JoinNonEmpty(" ", bankCountry, bank), bankAddress);
+            }
 
             // «Сумма платежа» и «Комиссия банка» идут подряд, затем их значения — берём первую строку «число + валюта».
             int amountLabel = IndexOfLabel(lines, "^Сумма платежа$", 0);
@@ -133,6 +168,20 @@ namespace MultiTool.Services
             string t = Normalize(text);
             var f = new PaymentFields();
 
+            // «ПЛАТЕЖНОЕ ПОРУЧЕНИЕ № 5563 Дата 08.10.2026»
+            Match number = Regex.Match(t, @"ПЛАТЕЖНОЕ[ \t]+ПОРУЧЕНИЕ[ \t]*№[ \t]*(\d[\w/\-]*)", Opt);
+            if (number.Success) f.Number = number.Groups[1].Value;
+
+            // Дата после слова «Дата»: допускаем пробелы любого вида, перенос строки и двоеточие (\s включает неразрывный пробел).
+            const string dateRx = @"Дата\s*:?\s*(\d{1,2}\.\d{1,2}\.\d{4})";
+            Match date = Regex.Match(t, dateRx, Opt);
+            if (number.Success)
+            {
+                Match afterNumber = Regex.Match(t.Substring(number.Index), dateRx, Opt);
+                if (afterNumber.Success) date = afterNumber;
+            }
+            if (date.Success) f.Date = date.Groups[1].Value;
+
             // «Счет №»: до слова «Бенефициар» — плательщик, после — получатель.
             int beneficiary = FirstIndex(t, @"Бенефициар");
             var accountRx = new Regex(@"Счет[ \t]*№[ \t]*:?[ \t]*([A-Za-z0-9]{5,})", Opt);
@@ -145,19 +194,34 @@ namespace MultiTool.Services
                     f.RecipientAccount = m.Groups[1].Value;
             }
 
+            // Получатель — всё между «Бенефициар:» и «Счет №» (в документе он может занимать несколько строк).
+            Match beneficiaryLabel = Regex.Match(t, @"Бенефициар[ \t]*:", Opt);
+            if (beneficiaryLabel.Success)
+            {
+                string rest = t.Substring(beneficiaryLabel.Index + beneficiaryLabel.Length);
+                Match stop = Regex.Match(rest, @"Счет[ \t]*№", Opt);
+                string chunk = stop.Success ? rest.Substring(0, stop.Index) : rest.Split(new[] { "\n\n" }, StringSplitOptions.None)[0];
+                f.Recipient = CollapseSpaces(chunk);
+            }
+
+            // Банк получателя — всё между «Банк-получатель:» и следующим «Код банка».
+            Match bankLabel = Regex.Match(t, @"Банк[ \t]*-[ \t]*получатель[ \t]*:", Opt);
+            if (bankLabel.Success)
+            {
+                string rest = t.Substring(bankLabel.Index + bankLabel.Length);
+                Match stop = Regex.Match(rest, @"Код[ \t]+банка", Opt);
+                if (stop.Success) f.RecipientBank = CollapseSpaces(rest.Substring(0, stop.Index));
+
+                // SWIFT — первый «Код банка» после «Банк-получатель» (первый «Код банка» в документе — банк отправителя).
+                Match swift = Regex.Match(rest, @"Код[ \t]+банка[ \t]*:?[ \t]*([A-Za-z0-9]{8,11})", Opt);
+                if (swift.Success && SwiftRx.IsMatch(swift.Groups[1].Value)) f.Swift = swift.Groups[1].Value;
+            }
+
             // Сумма цифрами + код валюты.
             Match amount = Regex.Match(t, @"Сумма[ \t]+цифрами[ \t]*:?[ \t]*(\d[\d  ,\.]*\d)", Opt);
             Match currency = Regex.Match(t, @"Код[ \t]+валюты[ \t]*:?[ \t]*([A-Za-z]{3})", Opt);
             if (amount.Success)
                 f.Amount = NormalizeAmount(amount.Groups[1].Value + (currency.Success ? " " + currency.Groups[1].Value : ""));
-
-            // SWIFT: первый «Код банка» после «Банк-получатель» (первый «Код банка» в документе — банк отправителя).
-            int recipientBank = FirstIndex(t, @"Банк[ \t]*-[ \t]*получатель");
-            if (recipientBank >= 0)
-            {
-                Match swift = Regex.Match(t.Substring(recipientBank), @"Код[ \t]+банка[ \t]*:?[ \t]*([A-Za-z0-9]{8,11})", Opt);
-                if (swift.Success && SwiftRx.IsMatch(swift.Groups[1].Value)) f.Swift = swift.Groups[1].Value;
-            }
 
             Match tnved = Regex.Match(t, @"Коды?[ \t]+ТН[ \t]*ВЭД[ \t]*:?[ \t]*(\d[\d,; \t]*\d)", Opt);
             if (tnved.Success) f.Tnved = tnved.Groups[1].Value.Trim();
@@ -170,43 +234,44 @@ namespace MultiTool.Services
             return f;
         }
 
-        /// <summary>После «Назначение платежа:» берутся строки до пустой строки; из них — только английский текст.</summary>
+        /// <summary>
+        /// «Назначение платежа: …» — первая строка (остаток строки с меткой) это русский текст, в ней могут быть
+        /// латинские символы и даты, поэтому она не учитывается. Английское назначение — следующие строки до пустой
+        /// строки или до следующей подписи; строка с кириллицей английским назначением не считается.
+        /// </summary>
         private static string ExtractPurposeEnglish(string t)
         {
             Match label = Regex.Match(t, @"Назначение[ \t]+платежа[ \t]*:", Opt);
             if (!label.Success) return null;
 
             string[] lines = t.Substring(label.Index + label.Length).Split('\n');
+
+            // Остаток строки с меткой — русская часть, пропускаем её (даже если там есть латиница).
+            int start = lines[0].Trim().Length > 0 ? 1 : 0;
+            bool russianSkipped = start == 1; // если после метки пусто, русский текст — первая непустая строка ниже
+
             var parts = new List<string>();
-            bool started = false;
-            foreach (string raw in lines)
+            for (int i = start; i < lines.Length; i++)
             {
-                string line = raw.Trim();
+                string line = lines[i].Trim();
                 if (line.Length == 0)
                 {
-                    if (started) break;
+                    if (parts.Count > 0) break;
                     continue;
                 }
 
-                // Следующая подпись документа («УНП плательщика: …») — назначение закончилось.
-                if (started && Regex.IsMatch(line, @"^[А-Яа-яЁё][^:]{2,40}:", Opt)) break;
-                started = true;
+                if (!russianSkipped)
+                {
+                    russianSkipped = true;
+                    if (CyrillicRx.IsMatch(line)) continue;
+                }
 
-                string english = EnglishPart(line);
-                if (english.Length > 0) parts.Add(english);
+                // Следующая подпись документа («УНП плательщика: …») или русская строка — назначение закончилось.
+                if (CyrillicRx.IsMatch(line)) break;
+                if (!LatinRx.IsMatch(line)) break;
+                parts.Add(line);
             }
             return parts.Count > 0 ? string.Join(" ", parts) : null;
-        }
-
-        /// <summary>Строка целиком латинская — берём её; смешанная — берём латинский хвост после последней кириллической буквы.</summary>
-        private static string EnglishPart(string line)
-        {
-            if (!LatinRx.IsMatch(line)) return "";
-            MatchCollection cyr = CyrillicRx.Matches(line);
-            if (cyr.Count == 0) return line;
-
-            string tail = line.Substring(cyr[cyr.Count - 1].Index + 1).Trim(' ', '\t', '/', '-', '–', ',', ';', ':', '(', ')');
-            return LatinRx.IsMatch(tail) ? tail : "";
         }
 
         // ───────────────────────── Вспомогательное ─────────────────────────
@@ -214,6 +279,11 @@ namespace MultiTool.Services
         private static string Normalize(string text)
         {
             return (text ?? "").Replace("\r\n", "\n").Replace('\r', '\n');
+        }
+
+        private static string CollapseSpaces(string s)
+        {
+            return Regex.Replace(s.Replace(' ', ' '), @"\s+", " ").Trim();
         }
 
         private static List<string> SplitLines(string text)
@@ -241,6 +311,17 @@ namespace MultiTool.Services
                 return isValid(lines[i]) ? lines[i] : null;
             }
             return null;
+        }
+
+        private static bool IsNotLabel(string value)
+        {
+            return !SiteLabels.Contains(value);
+        }
+
+        private static string JoinNonEmpty(string separator, params string[] parts)
+        {
+            string joined = string.Join(separator, parts.Where(p => !string.IsNullOrWhiteSpace(p)));
+            return joined.Length > 0 ? joined : null;
         }
 
         private static int FirstIndex(string text, string pattern)
