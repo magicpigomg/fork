@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Threading;
+using MultiTool.Models;
 using MultiTool.Services;
 
 namespace MultiTool.Views
@@ -23,6 +24,7 @@ namespace MultiTool.Views
         {
             InitializeComponent();
             _debounce.Tick += delegate { _debounce.Stop(); if (!FieldsMode) RunCompare(); };
+            Loaded += delegate { SyncMacroSwitch(); };
         }
 
         private bool FieldsMode
@@ -98,6 +100,7 @@ namespace MultiTool.Views
             FieldsPanel.Visibility = fields ? Visibility.Visible : Visibility.Collapsed;
             TextResultsPanel.Visibility = fields ? Visibility.Collapsed : Visibility.Visible;
             InputRow.Height = new GridLength(fields ? 120 : 170);
+            MacroBar.Visibility = fields ? Visibility.Visible : Visibility.Collapsed;
             if (fields) RefreshFields(); else RunCompare();
         }
 
@@ -318,6 +321,50 @@ namespace MultiTool.Views
             if (_siteFields != null) hint += "  ·  слева найдено " + _siteFields.FoundCount + " из " + total;
             if (_docFields != null) hint += "  ·  справа найдено " + _docFields.FoundCount + " из " + total;
             return hint;
+        }
+
+        // ── Макрос .mac из полей платежа ────────────────────────────────────────────────────
+
+        private bool _syncingMacro;
+
+        private void SyncMacroSwitch()
+        {
+            _syncingMacro = true;
+            MacroSwitch.IsChecked = AppSettings.Current.PaymentMacroEnabled;
+            _syncingMacro = false;
+            ApplyMacroSwitch();
+        }
+
+        private void OnMacroSwitchChanged(object sender, RoutedEventArgs e)
+        {
+            if (!IsLoaded || _syncingMacro) return;
+            AppSettings.Current.PaymentMacroEnabled = MacroSwitch.IsChecked == true;
+            ApplyMacroSwitch();
+        }
+
+        private void ApplyMacroSwitch()
+        {
+            bool on = MacroSwitch.IsChecked == true;
+            MacroButton.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+            SetMacroStatus(on ? "Макрос собирается из значений сайта; чего там нет — берётся из документа" : "", "MutedBrush");
+        }
+
+        private void OnCreateMacro(object sender, RoutedEventArgs e)
+        {
+            AcceptOutcome outcome = PaymentMacro.Create(_siteFields, _docFields, AppSettings.Current, Window.GetWindow(this));
+            bool failed = outcome.Status == Services.AcceptStatus.Failed;
+            SetMacroStatus(outcome.Message, failed ? "DangerBrush" : outcome.Status == Services.AcceptStatus.Saved ? "SuccessBrush" : "MutedBrush");
+
+            LogKind kind = outcome.Status == Services.AcceptStatus.Saved ? LogKind.Success
+                         : outcome.Status == Services.AcceptStatus.Cancelled ? LogKind.Info
+                         : LogKind.Error;
+            ActivityLog.Add("Макрос", outcome.Message, kind);
+        }
+
+        private void SetMacroStatus(string text, string brushKey)
+        {
+            MacroStatus.Text = text;
+            MacroStatus.Foreground = (Brush)FindResource(brushKey);
         }
 
         // ── Сравнение всего текста ───────────────────────────────────────────────────────────
