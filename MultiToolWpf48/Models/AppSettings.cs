@@ -106,6 +106,17 @@ namespace MultiTool.Models
         public string AcceptFolder { get; set; } = "";              // папка по умолчанию в окне сохранения
         public string AcceptTemplate { get; set; } = DefaultTemplates.AcceptMacro;
 
+        // ── Макрос .mac из полей платежа (страница «Сравнение текстов») ──────────────
+        public bool PaymentMacroEnabled { get; set; } = false;   // переключатель на странице сравнения
+        public bool PaymentMacroAskPath { get; set; } = true;    // true — окно «Сохранить как», false — постоянный файл
+        public string PaymentMacroSavePath { get; set; } = "";
+        public string PaymentMacroFolder { get; set; } = "";     // папка по умолчанию в окне сохранения
+        public int PaymentNameMaxLength { get; set; } = 140;     // длина поля «Наименование получателя»
+        public int PaymentCountryStart { get; set; } = 4;        // код страны из BIC: с какого символа (счёт с 0)
+        public int PaymentCountryLength { get; set; } = 2;       // …и сколько символов
+        public string PaymentBicPad { get; set; } = "XXX";       // добавляется к 8-символьному BIC
+        public string PaymentMacroTemplate { get; set; } = DefaultTemplates.PaymentMacro;
+
         // ── Разбор номера (инструменты) ─────────────────────────────────────────
         public int NumberSkipFirst { get; set; } = 8;   // убрать первые N символов
         public int NumberTake { get; set; } = 13;       // оставить M символов
