@@ -143,6 +143,22 @@ namespace MultiTool.Views
                 "Шаблон макроса !accept.mac (подстановки: {PayerAccount} {DateAccept} {NumberContract} {YnpBen} {DateDoc} {NumberAccept})",
                 nameof(AppSettings.AcceptTemplate), 260, mono: true));
 
+            // ── Макрос .mac из полей платежа ────────────────────────────────────────
+            var macro = AddCard("Макрос .mac из полей платежа",
+                "Создаётся на странице «Сравнение текстов» → «Поля платежа» (включите переключатель «Создавать файл .mac»). " +
+                "В макрос попадают: код страны из BIC, счёт получателя без пробелов, наименование получателя и BIC банка получателя.");
+            macro.Children.Add(Switch("Спрашивать путь при каждом сохранении (окно «Сохранить как»)", nameof(AppSettings.PaymentMacroAskPath)));
+            macro.Children.Add(PathField("Папка по умолчанию в окне «Сохранить как» (необязательно)", nameof(AppSettings.PaymentMacroFolder)));
+            macro.Children.Add(PathField("Постоянный файл — используется, когда запрос пути выключен", nameof(AppSettings.PaymentMacroSavePath)));
+            macro.Children.Add(Row(
+                Number("Длина поля наименования", nameof(AppSettings.PaymentNameMaxLength)),
+                Number("Код страны: с символа (с 0)", nameof(AppSettings.PaymentCountryStart)),
+                Number("Код страны: сколько символов", nameof(AppSettings.PaymentCountryLength))));
+            macro.Children.Add(Row(Text("Добавка к BIC из 8 символов", nameof(AppSettings.PaymentBicPad), 200)));
+            macro.Children.Add(Multiline(
+                "Шаблон макроса (подстановки: {Country} {RecipientAccount} {RecipientName} {Bic})",
+                nameof(AppSettings.PaymentMacroTemplate), 230, mono: true));
+
             // ── Разбор номера ───────────────────────────────────────────────────────
             var number = AddCard("Разбор номера (Инструменты)", "Результат 1 — без первых N символов, оставить M. Результат 2 — без первых K. Результат 3 — первые L символов.");
             var nw = NewWrap();
