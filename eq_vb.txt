@@ -111,36 +111,34 @@ Function BuildResult()
                   " в сумме " & FormatEqSum(GetValue(F_SUM))
 End Function
 
-' "231026" -> "23.10.26", "23102026" -> "23.10.2026"
+' "231026"            -> "23.10.26"
+' "23102026"          -> "23.10.2026"
+' "231026 10:39:39"   -> "23.10.26 10:39:39"
+' "23102610:39:39"    -> "23.10.26 10:39:39"
 Function FormatEqDate(s)
-    s = Replace(Trim(s), " ", "")
-    If InStr(s, ".") > 0 Or Len(s) < 5 Then   ' уже с точками или пусто - не трогаем
-        FormatEqDate = s
+    Dim d, t, p
+    s = Trim(s)
+    d = s
+    t = ""
+
+    ' отделяем время: две цифры часа перед первым ":" и всё, что дальше
+    p = InStr(s, ":")
+    If p > 2 Then
+        t = Trim(Mid(s, p - 2))
+        d = Trim(Left(s, p - 3))
+    End If
+
+    ' форматируем только дату
+    d = Replace(d, " ", "")
+    If InStr(d, ".") = 0 And Len(d) >= 5 Then
+        d = Left(d, 2) & "." & Mid(d, 3, 2) & "." & Mid(d, 5)
+    End If
+
+    If t <> "" Then
+        FormatEqDate = d & " " & t
     Else
-        FormatEqDate = Left(s, 2) & "." & Mid(s, 3, 2) & "." & Mid(s, 5)
+        FormatEqDate = d
     End If
-End Function
-
-' "0000123456" -> "1234,56", "5" -> "0,05"
-Function FormatEqSum(s)
-    Dim sign
-    s = Replace(Trim(s), " ", "")
-    sign = ""
-    If Left(s, 1) = "-" Then sign = "-": s = Mid(s, 2)
-    If Right(s, 1) = "-" Then sign = "-": s = Left(s, Len(s) - 1)   ' минус справа (формат IBM i)
-
-    If s = "" Or InStr(s, ",") > 0 Or InStr(s, ".") > 0 Then
-        FormatEqSum = sign & s                   ' пусто или уже с разделителем
-        Exit Function
-    End If
-
-    Do While Len(s) > 3 And Left(s, 1) = "0"     ' убрать ведущие нули
-        s = Mid(s, 2)
-    Loop
-    Do While Len(s) < 3                          ' минимум "0,05"
-        s = "0" & s
-    Loop
-    FormatEqSum = sign & Left(s, Len(s) - 2) & "," & Right(s, 2)
 End Function
 
 Function GetValue(name)
