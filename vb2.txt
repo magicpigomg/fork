@@ -1,71 +1,81 @@
 [PCOMM SCRIPT HEADER]
 LANGUAGE=VBSCRIPT
-DESCRIPTION=Вставка текста по выбору причины
+DESCRIPTION=Вставка текста по выбору причины (меню)
 [PCOMM SCRIPT SOURCE]
 OPTION EXPLICIT
 autECLSession.SetConnectionByName(ThisSessionName)
 
 ' ================== НАСТРОЙКИ ==================
-' "Название в меню|Текст для вставки|ENTER (необязательно)"
-' Подстановки: {DATE} - сегодня, {ASK} - спросить текст вручную
+Const MENU_HTA    = "C:\EQ\EqMenu.hta"
+Const CLEAR_FIELD = True     ' очищать поле от курсора до конца перед вставкой
+
+' "Группа|Название в меню|Текст для вставки|ENTER (необязательно)"
+' Подстановки: {DATE} - сегодня, {ASK} - ввести текст вручную в окне
 Dim ACTIONS
 ACTIONS = Array( _
-    "Бронь|БРОНЬ ДЕНЕЖНЫХ СРЕДСТВ", _
-    "Снятие брони|СНЯТИЕ БРОНИ ОТ {DATE}", _
-    "Отзыв - по заявлению клиента|ОТЗЫВ ПО ЗАЯВЛЕНИЮ КЛИЕНТА", _
-    "Отзыв - ошибка в реквизитах|ОТЗЫВ: ОШИБКА В РЕКВИЗИТАХ", _
-    "Отзыв - отсутствие средств|ОТЗЫВ: НЕДОСТАТОЧНО СРЕДСТВ", _
-    "Отзыв - другая причина|ОТЗЫВ: {ASK}", _
-    "Свой текст|{ASK}" _
+    "Бронь|Бронь|БРОНЬ ДЕНЕЖНЫХ СРЕДСТВ", _
+    "Бронь|Снятие брони|СНЯТИЕ БРОНИ ОТ {DATE}", _
+    "Отзыв|По заявлению клиента|ОТЗЫВ ПО ЗАЯВЛЕНИЮ КЛИЕНТА", _
+    "Отзыв|Ошибка в реквизитах|ОТЗЫВ: ОШИБКА В РЕКВИЗИТАХ", _
+    "Отзыв|Недостаточно средств|ОТЗЫВ: НЕДОСТАТОЧНО СРЕДСТВ", _
+    "Отзыв|Другая причина|ОТЗЫВ: {ASK}", _
+    "Прочее|Свой текст|{ASK}" _
 )
-Const CLEAR_FIELD = True     ' очищать поле от курсора до конца перед вставкой
 ' ===============================================
 
-Dim ps
-Set ps = autECLSession.autECLPS
+Dim ps, fso, sh
+Set ps  = autECLSession.autECLPS
+Set fso = CreateObject("Scripting.FileSystemObject")
+Set sh  = CreateObject("WScript.Shell")
 
 subMain
 
 Sub subMain()
-    Dim menu, i, p, choice, text, row, col, maxLen, extra
+    Dim row, col, maxLen, tmp, inF, outF, f, i, p, idx, extra, text
 
-    autECLSession.autECLOIA.WaitForInputReady 10000
     row = ps.CursorPosRow
     col = ps.CursorPosCol
 
-    ' --- проверить, что курсор в поле ввода ---
     maxLen = FieldRoomAtCursor(row, col)
     If maxLen = 0 Then
         MsgBox "Курсор не в поле ввода. Поставьте курсор в нужное поле и повторите.", vbExclamation, "Вставка"
         Exit Sub
     End If
+    If Not fso.FileExists(MENU_HTA) Then
+        MsgBox "Не найден файл меню: " & MENU_HTA, vbCritical, "Вставка"
+        Exit Sub
+    End If
 
-    ' --- меню ---
-    menu = "Выберите причину:" & vbCrLf & vbCrLf
+    ' --- передать пункты в меню ---
+    tmp  = sh.ExpandEnvironmentStrings("%TEMP%")
+    inF  = tmp & "\eq_menu_in.txt"
+    outF = tmp & "\eq_menu_out.txt"
+    If fso.FileExists(outF) Then fso.DeleteFile outF
+
+    Set f = fso.CreateTextFile(inF, True, True)          ' Unicode
+    f.WriteLine CStr(maxLen)
     For i = 0 To UBound(ACTIONS)
-        p = Split(ACTIONS(i), "|")
-        menu = menu & "  " & (i + 1) & " - " & p(0) & vbCrLf
+        p = Split(ACTIONS(i) & "|||", "|")
+        f.WriteLine p(0) & "|" & p(1) & "|" & p(2)
     Next
-    menu = menu & vbCrLf & "Введите номер:"
+    f.Close
 
-    choice = InputBox(menu, "Вставка в Equation", "1")
-    If choice = "" Then Exit Sub                                   ' Отмена
-    If Not IsNumeric(choice) Then MsgBox "Нужно ввести номер", vbExclamation, "Вставка": Exit Sub
-    choice = CInt(choice) - 1
-    If choice < 0 Or choice > UBound(ACTIONS) Then MsgBox "Нет такого пункта", vbExclamation, "Вставка": Exit Sub
+    ' --- показать меню и дождаться выбора ---
+    sh.Run "mshta.exe """ & MENU_HTA & """", 1, True
+    If Not fso.FileExists(outF) Then Exit Sub            ' нажали Esc / закрыли окно
 
-    p = Split(ACTIONS(choice), "|")
+    Set f = fso.OpenTextFile(outF, 1, False, -1)
+    idx = CInt(Trim(f.ReadLine))
+    extra = ""
+    If Not f.AtEndOfStream Then extra = f.ReadAll
+    f.Close
+    fso.DeleteFile outF
 
     ' --- собрать текст ---
-    text = p(1)
-    If InStr(text, "{ASK}") > 0 Then
-        extra = InputBox("Введите текст:", p(0), "")
-        If extra = "" Then Exit Sub
-        text = Replace(text, "{ASK}", extra)
-    End If
+    p = Split(ACTIONS(idx) & "|||", "|")
+    text = Replace(p(2), "{ASK}", extra)
     text = Replace(text, "{DATE}", CStr(Date))
 
-    ' --- длина поля ---
     If maxLen > 0 And Len(text) > maxLen Then
         If MsgBox("Текст длиннее поля (" & Len(text) & " > " & maxLen & " символов)." & vbCrLf & _
                   "Обрезать до:" & vbCrLf & Left(text, maxLen) & " ?", _
@@ -77,14 +87,11 @@ Sub subMain()
     ps.SetCursorPos row, col
     If CLEAR_FIELD Then ps.SendKeys "[eraseeof]"
     ps.SetText text, row, col
-
-    If UBound(p) >= 2 Then
-        If UCase(Trim(p(2))) = "ENTER" Then ps.SendKeys "[enter]"
-    End If
+    If UCase(Trim(p(3))) = "ENTER" Then ps.SendKeys "[enter]"
 End Sub
 
 ' Сколько символов помещается от курсора до конца поля.
-' 0 - курсор не в поле ввода, -1 - определить не удалось (вставляем без проверки)
+' 0 - курсор не в поле ввода, -1 - определить не удалось
 Function FieldRoomAtCursor(row, col)
     Dim fl, f
     FieldRoomAtCursor = -1
