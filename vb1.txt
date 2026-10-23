@@ -1,62 +1,133 @@
 [PCOMM SCRIPT HEADER]
 LANGUAGE=VBSCRIPT
-DESCRIPTION=Тест: проверка значений из файла на экране Equation
+DESCRIPTION=Мониторинг: F5 + проверка значений из файла на экране Equation
 [PCOMM SCRIPT SOURCE]
 OPTION EXPLICIT
 autECLSession.SetConnectionByName(ThisSessionName)
 
 ' ================== НАСТРОЙКИ ==================
 Const LIST_FILE    = "C:\EQ\check.txt"   ' одно значение на строку
+Const STOP_FILE    = "C:\EQ\stop.txt"    ' создайте этот файл - макрос остановится
 Const FILE_CHARSET = "utf-8"             ' если кракозябры - "windows-1251"
-Const SHOW_IF_NONE = True                ' показывать окно, если ничего не найдено
+Const INTERVAL_MS  = 5000                ' пауза между обновлениями (мс)
+Const REFRESH_KEY  = "[pf5]"             ' клавиша обновления
+Const SCREEN_TEXT  = ""                  ' текст, по которому узнаётся нужный экран ("" - не проверять)
+Const ALERT_ONCE   = True                ' True - предупреждать только о НОВЫХ совпадениях
 ' ===============================================
 
-Dim ps
-Set ps = autECLSession.autECLPS
+Dim ps, oia, fso, values, fileStamp, alerted
+Set ps  = autECLSession.autECLPS
+Set oia = autECLSession.autECLOIA
+Set fso = CreateObject("Scripting.FileSystemObject")
+Set alerted = CreateObject("Scripting.Dictionary")
+fileStamp = ""
+values = Array()
 
 subMain
 
 Sub subMain()
-    Dim lines, i, v, r, rowText, found, rowsFound
+    Dim found
+    If fso.FileExists(STOP_FILE) Then fso.DeleteFile STOP_FILE   ' сброс старого стоп-файла
 
-    autECLSession.autECLOIA.WaitForInputReady 10000
+    Do
+        If fso.FileExists(STOP_FILE) Then
+            MsgBox "Мониторинг остановлен", vbInformation, "Проверка"
+            Exit Do
+        End If
 
-    lines = ReadLines(LIST_FILE)
-    If UBound(lines) < 0 Then Exit Sub
+        ReloadListIfChanged
 
-    found = ""
-    For i = 0 To UBound(lines)
-        v = Trim(lines(i))
-        If v <> "" Then
-            rowsFound = ""
-            For r = 1 To ps.NumRows
-                rowText = ps.GetText(r, 1, ps.NumCols)
-                If InStr(1, rowText, v, vbTextCompare) > 0 Then
-                    If rowsFound <> "" Then rowsFound = rowsFound & ", "
-                    rowsFound = rowsFound & r
-                End If
-            Next
-            If rowsFound <> "" Then
-                found = found & "• " & v & "   (строка экрана: " & rowsFound & ")" & vbCrLf
+        If IsRightScreen() Then
+            ps.SendKeys REFRESH_KEY
+            oia.WaitForInputReady 15000
+            ps.Wait 500                          ' дать экрану дорисоваться
+
+            found = CheckScreen()
+            If found <> "" Then
+                MsgBox "На экране найдены значения из списка:" & vbCrLf & vbCrLf & found & vbCrLf & _
+                       "Время: " & Now(), vbExclamation + vbSystemModal, "ВНИМАНИЕ"
+            End If
+        End If
+
+        ps.Wait INTERVAL_MS
+    Loop
+End Sub
+
+' Нужный ли экран открыт
+Function IsRightScreen()
+    If SCREEN_TEXT = "" Then
+        IsRightScreen = True
+    Else
+        IsRightScreen = InStr(1, ps.GetText(1, 1, ps.NumRows * ps.NumCols), SCREEN_TEXT, vbTextCompare) > 0
+    End If
+End Function
+
+' Возвращает текст предупреждения или "" если показывать нечего
+Function CheckScreen()
+    Dim i, v, r, rowText, rowsFound, msg, nowFound
+    msg = ""
+    Set nowFound = CreateObject("Scripting.Dictionary")
+
+    For i = 0 To UBound(values)
+        v = values(i)
+        rowsFound = ""
+        For r = 1 To ps.NumRows
+            rowText = ps.GetText(r, 1, ps.NumCols)
+            If InStr(1, rowText, v, vbTextCompare) > 0 Then
+                If rowsFound <> "" Then rowsFound = rowsFound & ", "
+                rowsFound = rowsFound & r
+            End If
+        Next
+
+        If rowsFound <> "" Then
+            nowFound(LCase(v)) = True
+            If Not ALERT_ONCE Or Not alerted.Exists(LCase(v)) Then
+                msg = msg & "• " & v & "   (строка экрана: " & rowsFound & ")" & vbCrLf
             End If
         End If
     Next
 
-    If found <> "" Then
-        MsgBox "На экране найдены значения из списка:" & vbCrLf & vbCrLf & found, _
-               vbExclamation + vbSystemModal, "ВНИМАНИЕ"
-    ElseIf SHOW_IF_NONE Then
-        MsgBox "Совпадений нет", vbInformation, "Проверка"
+    ' запоминаем текущие совпадения; если значение пропало с экрана,
+    ' при следующем появлении будет новое предупреждение
+    Set alerted = nowFound
+    CheckScreen = msg
+End Function
+
+' Перечитать список, если файл изменился
+Sub ReloadListIfChanged()
+    Dim stamp, lines, i, cnt, arr()
+    If Not fso.FileExists(LIST_FILE) Then
+        If fileStamp <> "missing" Then
+            MsgBox "Файл не найден: " & LIST_FILE, vbCritical, "Проверка"
+            fileStamp = "missing"
+        End If
+        values = Array()
+        Exit Sub
+    End If
+
+    stamp = CStr(fso.GetFile(LIST_FILE).DateLastModified)
+    If stamp = fileStamp Then Exit Sub
+    fileStamp = stamp
+
+    lines = ReadLines(LIST_FILE)
+    cnt = -1
+    ReDim arr(UBound(lines) + 1)
+    For i = 0 To UBound(lines)
+        If Trim(lines(i)) <> "" Then
+            cnt = cnt + 1
+            arr(cnt) = Trim(lines(i))
+        End If
+    Next
+    If cnt < 0 Then
+        values = Array()
+    Else
+        ReDim Preserve arr(cnt)
+        values = arr
     End If
 End Sub
 
 Function ReadLines(path)
     Dim st, txt
-    ReadLines = Array()
-    If Not CreateObject("Scripting.FileSystemObject").FileExists(path) Then
-        MsgBox "Файл не найден: " & path, vbCritical, "Проверка"
-        Exit Function
-    End If
     Set st = CreateObject("ADODB.Stream")
     st.Type = 2
     st.Charset = FILE_CHARSET
