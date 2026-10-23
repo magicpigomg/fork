@@ -1,0 +1,139 @@
+[PCOMM SCRIPT HEADER]
+LANGUAGE=VBSCRIPT
+DESCRIPTION=Тест: вставка из буфера с выбором действия
+[PCOMM SCRIPT SOURCE]
+OPTION EXPLICIT
+autECLSession.SetConnectionByName(ThisSessionName)
+
+' ================== НАСТРОЙКИ ==================
+' "Название в меню|Шаблон текста|ENTER (необязательно - нажать Enter после вставки)"
+' Подстановки: {CLIP} - текст из буфера, {DATE} - сегодня, {ASK} - спросить текст вручную
+Dim ACTIONS
+ACTIONS = Array( _
+    "Бронь|БРОНЬ {CLIP}", _
+    "Причина отзыва|ОТЗЫВ: {CLIP}", _
+    "Снятие брони|СНЯТИЕ БРОНИ {CLIP} ОТ {DATE}", _
+    "Вставить как есть|{CLIP}", _
+    "Свой текст|{ASK}" _
+)
+Const CLEAR_FIELD = True     ' очищать поле от курсора до конца перед вставкой
+' ===============================================
+
+Dim ps
+Set ps = autECLSession.autECLPS
+
+subMain
+
+Sub subMain()
+    Dim clip, menu, i, p, choice, text, row, col, maxLen, extra
+
+    autECLSession.autECLOIA.WaitForInputReady 10000
+    row = ps.CursorPosRow
+    col = ps.CursorPosCol
+
+    ' --- 1. Буфер обмена ---
+    clip = GetClipboard()
+    clip = Trim(Replace(Replace(clip, vbCr, " "), vbLf, " "))   ' в одну строку
+
+    ' --- 2. Меню выбора ---
+    If clip = "" Then
+        menu = "Буфер обмена пуст." & vbCrLf & vbCrLf
+    Else
+        menu = "В буфере: " & Left(clip, 60)
+        If Len(clip) > 60 Then menu = menu & "..."
+        menu = menu & vbCrLf & vbCrLf
+    End If
+    menu = menu & "Что делаем?" & vbCrLf
+    For i = 0 To UBound(ACTIONS)
+        p = Split(ACTIONS(i), "|")
+        menu = menu & "  " & (i + 1) & " - " & p(0) & vbCrLf
+    Next
+    menu = menu & vbCrLf & "Введите номер:"
+
+    choice = InputBox(menu, "Вставка в Equation", "1")
+    If choice = "" Then Exit Sub                                  ' Отмена
+    If Not IsNumeric(choice) Then MsgBox "Нужно ввести номер", vbExclamation: Exit Sub
+    choice = CInt(choice) - 1
+    If choice < 0 Or choice > UBound(ACTIONS) Then MsgBox "Нет такого пункта", vbExclamation: Exit Sub
+
+    p = Split(ACTIONS(choice), "|")
+
+    ' --- 3. Собрать текст ---
+    text = p(1)
+    If InStr(text, "{ASK}") > 0 Then
+        extra = InputBox("Введите текст:", p(0), clip)
+        If extra = "" Then Exit Sub
+        text = Replace(text, "{ASK}", extra)
+    End If
+    If InStr(text, "{CLIP}") > 0 And clip = "" Then
+        MsgBox "Для «" & p(0) & "» нужен текст в буфере обмена", vbExclamation
+        Exit Sub
+    End If
+    text = Replace(text, "{CLIP}", clip)
+    text = Replace(text, "{DATE}", CStr(Date))
+
+    ' --- 4. Проверить поле под курсором ---
+    maxLen = FieldRoomAtCursor(row, col)
+    If maxLen = 0 Then
+        MsgBox "Курсор не в поле ввода. Поставьте курсор в нужное поле и повторите.", vbExclamation
+        Exit Sub
+    End If
+    If maxLen > 0 And Len(text) > maxLen Then
+        If MsgBox("Текст длиннее поля (" & Len(text) & " > " & maxLen & " символов)." & vbCrLf & _
+                  "Обрезать до:" & vbCrLf & Left(text, maxLen) & " ?", _
+                  vbYesNo + vbQuestion, "Вставка") = vbNo Then Exit Sub
+        text = Left(text, maxLen)
+    End If
+
+    ' --- 5. Вставить ---
+    ps.SetCursorPos row, col
+    If CLEAR_FIELD Then ps.SendKeys "[eraseeof]"
+    ps.SetText text, row, col
+
+    If UBound(p) >= 2 Then
+        If UCase(Trim(p(2))) = "ENTER" Then ps.SendKeys "[enter]"
+    End If
+End Sub
+
+' Сколько символов помещается от курсора до конца поля.
+' 0 - курсор не в поле ввода, -1 - определить не удалось (вставляем без проверки)
+Function FieldRoomAtCursor(row, col)
+    Dim fl, f
+    FieldRoomAtCursor = -1
+    On Error Resume Next
+    Set fl = ps.autECLFieldList
+    fl.Refresh
+    Set f = fl.FindFieldByRowCol(row, col)
+    If Err.Number <> 0 Or f Is Nothing Then Err.Clear: Exit Function
+    If f.Protected Then FieldRoomAtCursor = 0: Exit Function
+    FieldRoomAtCursor = f.Length - ((row - f.StartRow) * ps.NumCols + (col - f.StartCol))
+    On Error GoTo 0
+End Function
+
+' Чтение буфера обмена: сначала через htmlfile, если не вышло - через PowerShell
+Function GetClipboard()
+    Dim s, sh, fso, tmp, st
+    s = ""
+    On Error Resume Next
+    s = CreateObject("htmlfile").parentWindow.clipboardData.getData("Text")
+    If Err.Number <> 0 Then s = ""
+    If IsNull(s) Then s = ""
+    Err.Clear
+    On Error GoTo 0
+
+    If s = "" Then
+        Set sh = CreateObject("WScript.Shell")
+        Set fso = CreateObject("Scripting.FileSystemObject")
+        tmp = fso.GetSpecialFolder(2) & "\eq_clip.txt"
+        sh.Run "powershell -NoProfile -WindowStyle Hidden -Command ""Get-Clipboard -Raw | Out-File -FilePath '" & tmp & "' -Encoding utf8""", 0, True
+        If fso.FileExists(tmp) Then
+            Set st = CreateObject("ADODB.Stream")
+            st.Type = 2: st.Charset = "utf-8": st.Open
+            st.LoadFromFile tmp
+            s = st.ReadText
+            st.Close
+            fso.DeleteFile tmp
+        End If
+    End If
+    GetClipboard = s
+End Function
