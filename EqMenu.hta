@@ -1,0 +1,184 @@
+<html>
+<head>
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>Equation — выбор причины</title>
+<hta:application id="app" applicationname="EqMenu" border="dialog" caption="yes"
+  maximizebutton="no" minimizebutton="no" showintaskbar="yes" singleinstance="yes"
+  sysmenu="yes" scroll="no" innerborder="no" contextmenu="no" selection="no">
+<script>
+  var W = 480, H = 600;
+  window.resizeTo(W, H);
+  window.moveTo((screen.availWidth - W) / 2, (screen.availHeight - H) / 2);
+</script>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+  body { font-family: "Segoe UI", Tahoma, Arial, sans-serif; background: #f3f5f9; color: #1f2937; font-size: 14px; }
+
+  .head { background: #1e3a5f; color: #fff; padding: 14px 18px 12px; }
+  .title { font-size: 17px; font-weight: 600; }
+  .sub { font-size: 12px; color: #c7d4e6; margin-top: 2px; min-height: 16px; }
+
+  .searchbox { padding: 10px 12px 6px; }
+  #q { width: 100%; padding: 8px 10px; border: 1px solid #d1d9e6; border-radius: 8px; font: inherit; outline: none; background: #fff; }
+  #q:focus { border-color: #2563eb; }
+
+  #list { position: relative; overflow-y: auto; padding: 0 12px 8px; }
+  .group { font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: .6px; margin: 10px 4px 4px; }
+  .item { position: relative; background: #fff; border: 1px solid #e3e8ef; border-radius: 8px; padding: 7px 10px 7px 46px; margin: 4px 0; cursor: pointer; }
+  .item .num { position: absolute; left: 10px; top: 50%; margin-top: -13px; width: 26px; height: 26px; line-height: 26px; text-align: center; border-radius: 7px; background: #e8eef7; color: #1e3a5f; font-weight: 700; font-size: 13px; }
+  .item .name { font-weight: 600; }
+  .item .prev { font-size: 12px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item.sel { border-color: #2563eb; background: #eef4ff; }
+  .item.sel .num { background: #2563eb; color: #fff; }
+  .empty { text-align: center; color: #9ca3af; padding: 30px 0; }
+
+  #ask { display: none; padding: 16px; }
+  .ask-title { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+  #askInput { width: 100%; padding: 9px 10px; border: 1px solid #2563eb; border-radius: 8px; font: inherit; outline: none; }
+  .ask-info { margin-top: 8px; font-size: 12px; color: #6b7280; }
+  #askPreview { display: block; word-wrap: break-word; margin-bottom: 4px; }
+  #askCount.over { color: #dc2626; font-weight: 600; }
+  .btns { margin-top: 14px; }
+  button { font: inherit; padding: 7px 16px; border-radius: 8px; border: 1px solid #2563eb; background: #2563eb; color: #fff; cursor: pointer; margin-right: 6px; }
+  button.sec { background: #fff; color: #2563eb; }
+
+  .foot { position: absolute; left: 0; right: 0; bottom: 0; height: 30px; line-height: 30px; padding: 0 14px; font-size: 11px; color: #6b7280; background: #fff; border-top: 1px solid #e3e8ef; }
+  .foot b { color: #374151; }
+</style>
+</head>
+<body>
+  <div class="head">
+    <div class="title">Выберите причину</div>
+    <div class="sub" id="sub"></div>
+  </div>
+
+  <div class="searchbox" id="searchbox"><input id="q" type="text" placeholder="Поиск…" autocomplete="off"></div>
+  <div id="list"></div>
+
+  <div id="ask">
+    <div class="ask-title" id="askTitle"></div>
+    <input id="askInput" type="text" autocomplete="off">
+    <div class="ask-info"><span id="askPreview"></span><span id="askCount"></span></div>
+    <div class="btns">
+      <button onclick="askOk()">Вставить</button>
+      <button class="sec" onclick="askBack()">Назад</button>
+    </div>
+  </div>
+
+  <div class="foot"><b>1–9</b> выбрать &nbsp;·&nbsp; <b>↑ ↓</b> + <b>Enter</b> &nbsp;·&nbsp; буквы — поиск &nbsp;·&nbsp; <b>Esc</b> отмена</div>
+
+<script>
+  var fso = new ActiveXObject("Scripting.FileSystemObject");
+  var sh  = new ActiveXObject("WScript.Shell");
+  var TMP = sh.ExpandEnvironmentStrings("%TEMP%");
+  var IN_FILE = TMP + "\\eq_menu_in.txt", OUT_FILE = TMP + "\\eq_menu_out.txt";
+  var items = [], view = [], sel = 0, maxLen = -1, askItem = null;
+  function $(id) { return document.getElementById(id); }
+
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+  function today() { var d = new Date(); function z(n) { return (n < 10 ? "0" : "") + n; } return z(d.getDate()) + "." + z(d.getMonth() + 1) + "." + d.getFullYear(); }
+  function fillText(t, ask) { return t.replace(/\{ASK\}/g, ask).replace(/\{DATE\}/g, today()); }
+
+  function load() {
+    if (!fso.FileExists(IN_FILE)) { alert("Нет данных для меню"); window.close(); return; }
+    var f = fso.OpenTextFile(IN_FILE, 1, false, -1), txt = f.ReadAll(); f.Close();
+    var lines = txt.split(/\r?\n/);
+    maxLen = parseInt(lines[0], 10);
+    for (var i = 1; i < lines.length; i++) {
+      if (!lines[i]) continue;
+      var p = lines[i].split("|");
+      items.push({ g: p[0] || "", n: p[1] || "", t: p[2] || "", idx: items.length });
+    }
+    $("sub").innerHTML = maxLen > 0 ? "Свободно в поле: " + maxLen + " симв." : "";
+  }
+
+  function render() {
+    var q = $("q").value.toLowerCase(), html = "", lastG = null;
+    view = [];
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (q && (it.g + " " + it.n + " " + it.t).toLowerCase().indexOf(q) < 0) continue;
+      if (it.g !== lastG) { if (it.g) html += '<div class="group">' + esc(it.g) + '</div>'; lastG = it.g; }
+      var k = view.length; view.push(it);
+      html += '<div class="item" id="it' + k + '" onclick="pick(' + k + ')" onmouseover="hover(' + k + ')">' +
+              '<span class="num">' + (k < 9 ? k + 1 : "") + '</span>' +
+              '<div class="name">' + esc(it.n) + '</div>' +
+              '<div class="prev">' + esc(fillText(it.t, "…")) + '</div></div>';
+    }
+    if (!view.length) html = '<div class="empty">Ничего не найдено</div>';
+    $("list").innerHTML = html;
+    sel = 0; mark(false);
+  }
+
+  function mark(scroll) {
+    for (var i = 0; i < view.length; i++) $("it" + i).className = "item" + (i === sel ? " sel" : "");
+    if (!scroll || !view.length) return;
+    var el = $("it" + sel), L = $("list");
+    if (el.offsetTop < L.scrollTop) L.scrollTop = el.offsetTop - 30;
+    else if (el.offsetTop + el.offsetHeight > L.scrollTop + L.clientHeight) L.scrollTop = el.offsetTop + el.offsetHeight - L.clientHeight + 6;
+  }
+  function hover(k) { if (sel !== k) { sel = k; mark(false); } }
+
+  function pick(k) {
+    var it = view[k]; if (!it) return;
+    if (it.t.indexOf("{ASK}") >= 0) showAsk(it); else finish(it.idx, "");
+  }
+
+  function showAsk(it) {
+    askItem = it;
+    $("list").style.display = "none"; $("searchbox").style.display = "none"; $("ask").style.display = "block";
+    $("askTitle").innerHTML = esc(it.n);
+    $("askInput").value = ""; updAsk(); $("askInput").focus();
+  }
+  function askBack() {
+    askItem = null;
+    $("ask").style.display = "none"; $("list").style.display = "block"; $("searchbox").style.display = "block";
+    $("q").focus();
+  }
+  function updAsk() {
+    var full = fillText(askItem.t, $("askInput").value);
+    $("askPreview").innerHTML = esc(full);
+    if (maxLen > 0) { var c = $("askCount"); c.innerHTML = full.length + " / " + maxLen; c.className = full.length > maxLen ? "over" : ""; }
+  }
+  function askOk() {
+    var v = $("askInput").value;
+    if (!v.replace(/\s/g, "")) { $("askInput").focus(); return; }
+    finish(askItem.idx, v);
+  }
+
+  function finish(idx, ask) {
+    var f = fso.CreateTextFile(OUT_FILE, true, true);
+    f.WriteLine(String(idx)); f.Write(ask); f.Close();
+    window.close();
+  }
+
+  document.onkeydown = function (e) {
+    e = e || window.event; var k = e.keyCode;
+    if (askItem) {
+      if (k === 13) { askOk(); return false; }
+      if (k === 27) { askBack(); return false; }
+      return true;
+    }
+    if (k === 27) { if ($("q").value) { $("q").value = ""; render(); } else window.close(); return false; }
+    if (k === 40) { if (sel < view.length - 1) { sel++; mark(true); } return false; }
+    if (k === 38) { if (sel > 0) { sel--; mark(true); } return false; }
+    if (k === 13) { pick(sel); return false; }
+    if (!$("q").value) {
+      var d = (k >= 49 && k <= 57) ? k - 48 : (k >= 97 && k <= 105) ? k - 96 : 0;
+      if (d && d <= view.length) { pick(d - 1); return false; }
+    }
+    return true;
+  };
+
+  window.onload = function () {
+    load(); render();
+    $("list").style.height = (document.documentElement.clientHeight - $("list").offsetTop - 34) + "px";
+    $("q").oninput = render;
+    $("askInput").oninput = updAsk;
+    window.focus(); $("q").focus();
+  };
+</script>
+</body>
+</html>
