@@ -1,0 +1,118 @@
+[PCOMM SCRIPT HEADER]
+LANGUAGE=VBSCRIPT
+DESCRIPTION=Equation: сохранить поля документа в файл
+[PCOMM SCRIPT SOURCE]
+OPTION EXPLICIT
+autECLSession.SetConnectionByName(ThisSessionName)
+
+' ================== НАСТРОЙКИ ==================
+Const OUT_DIR  = "C:\EQ\"            ' папка для файлов
+Const SEP      = ";"                 ' разделитель (для русского Excel - ";")
+Const UNICODE_FILE = False           ' True - Unicode (UTF-16), False - ANSI (Windows-1251)
+
+' Поля: "Название|строка|колонка|длина"
+' Координаты берите со своего экрана (позиция курсора видна в правом нижнем углу PCOMM)
+Dim FIELDS
+FIELDS = Array( _
+    "Номер документа|4|20|16", _
+    "Дата|5|20|10", _
+    "Счёт дебета|7|20|20", _
+    "Счёт кредита|8|20|20", _
+    "Сумма|10|20|18", _
+    "Валюта|10|45|3", _
+    "Назначение|12|20|60" _
+)
+
+' Поля, которые ищутся по подписи: "Название|Текст подписи|длина значения"
+' Подходит, если поле "плавает" по экрану. Значение берётся сразу после подписи.
+Dim LABEL_FIELDS
+LABEL_FIELDS = Array( _
+    "Получатель|Получатель:|40" _
+)
+' ===============================================
+
+Dim ps, oia
+Set ps  = autECLSession.autECLPS
+Set oia = autECLSession.autECLOIA
+
+subMain
+
+Sub subMain()
+    Dim fso, f, fileName, isNew, headers, values, i, p, v
+
+    oia.WaitForInputReady 10000
+
+    ' --- собрать значения ---
+    headers = Array("Дата выгрузки")
+    values  = Array(Now())
+
+    For i = 0 To UBound(FIELDS)
+        p = Split(FIELDS(i), "|")
+        v = Trim(ps.GetText(CInt(p(1)), CInt(p(2)), CInt(p(3))))
+        AddItem headers, p(0)
+        AddItem values, v
+    Next
+
+    For i = 0 To UBound(LABEL_FIELDS)
+        p = Split(LABEL_FIELDS(i), "|")
+        AddItem headers, p(0)
+        AddItem values, GetAfterLabel(p(1), CInt(p(2)))
+    Next
+
+    ' --- запись в файл (дописывание) ---
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    If Not fso.FolderExists(OUT_DIR) Then fso.CreateFolder OUT_DIR
+
+    fileName = OUT_DIR & "eq_docs_" & Year(Date) & Right("0" & Month(Date), 2) & Right("0" & Day(Date), 2) & ".csv"
+    isNew = Not fso.FileExists(fileName)
+
+    ' 8 = ForAppending, True = создать, если нет; -1 = Unicode, 0 = ANSI
+    If UNICODE_FILE Then
+        Set f = fso.OpenTextFile(fileName, 8, True, -1)
+    Else
+        Set f = fso.OpenTextFile(fileName, 8, True, 0)
+    End If
+
+    If isNew Then f.WriteLine JoinCsv(headers)
+    f.WriteLine JoinCsv(values)
+    f.Close
+
+    MsgBox "Записано в " & fileName, vbInformation, "Equation"
+End Sub
+
+' Найти подпись на экране и вернуть текст сразу за ней
+Function GetAfterLabel(label, length)
+    Dim r, c, rowText
+    GetAfterLabel = ""
+    For r = 1 To ps.NumRows
+        rowText = ps.GetText(r, 1, ps.NumCols)
+        c = InStr(1, rowText, label, vbTextCompare)
+        If c > 0 Then
+            c = c + Len(label)
+            If c + length - 1 > ps.NumCols Then length = ps.NumCols - c + 1
+            GetAfterLabel = Trim(ps.GetText(r, c, length))
+            Exit Function
+        End If
+    Next
+End Function
+
+' Добавить элемент в массив
+Sub AddItem(arr, item)
+    ReDim Preserve arr(UBound(arr) + 1)
+    arr(UBound(arr)) = item
+End Sub
+
+' Склеить строку CSV с экранированием кавычек и разделителя
+Function JoinCsv(arr)
+    Dim i, s, v
+    s = ""
+    For i = 0 To UBound(arr)
+        v = CStr(arr(i))
+        If InStr(v, SEP) > 0 Or InStr(v, """") > 0 Then
+            v = """" & Replace(v, """", """""") & """"
+        End If
+        If i > 0 Then s = s & SEP
+        s = s & v
+    Next
+    JoinCsv = s
+End Function
