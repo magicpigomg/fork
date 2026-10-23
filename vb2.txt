@@ -1,106 +1,173 @@
 [PCOMM SCRIPT HEADER]
 LANGUAGE=VBSCRIPT
-DESCRIPTION=Вставка текста по выбору причины (меню)
+DESCRIPTION=Вставка текста по выбору причины
 [PCOMM SCRIPT SOURCE]
 OPTION EXPLICIT
 autECLSession.SetConnectionByName(ThisSessionName)
 
 ' ================== НАСТРОЙКИ ==================
-Const MENU_HTA    = "C:\EQ\EqMenu.hta"
-Const CLEAR_FIELD = True     ' очищать поле от курсора до конца перед вставкой
-
-' "Группа|Название в меню|Текст для вставки|ENTER (необязательно)"
-' Подстановки: {DATE} - сегодня, {ASK} - ввести текст вручную в окне
+' "Название в меню|Текст для вставки|ENTER (необязательно)"
+' Подстановка: {DATE} - сегодня
 Dim ACTIONS
 ACTIONS = Array( _
-    "Бронь|Бронь|БРОНЬ ДЕНЕЖНЫХ СРЕДСТВ", _
-    "Бронь|Снятие брони|СНЯТИЕ БРОНИ ОТ {DATE}", _
-    "Отзыв|По заявлению клиента|ОТЗЫВ ПО ЗАЯВЛЕНИЮ КЛИЕНТА", _
-    "Отзыв|Ошибка в реквизитах|ОТЗЫВ: ОШИБКА В РЕКВИЗИТАХ", _
-    "Отзыв|Недостаточно средств|ОТЗЫВ: НЕДОСТАТОЧНО СРЕДСТВ", _
-    "Отзыв|Другая причина|ОТЗЫВ: {ASK}", _
-    "Прочее|Свой текст|{ASK}" _
+    "Бронь|БРОНЬ ДЕНЕЖНЫХ СРЕДСТВ", _
+    "Снятие брони|СНЯТИЕ БРОНИ ОТ {DATE}", _
+    "Отзыв - по заявлению клиента|ОТЗЫВ ПО ЗАЯВЛЕНИЮ КЛИЕНТА", _
+    "Отзыв - ошибка в реквизитах|ОТЗЫВ: ОШИБКА В РЕКВИЗИТАХ ПОЛУЧАТЕЛЯ", _
+    "Отзыв - недостаточно средств|ОТЗЫВ: НЕДОСТАТОЧНО СРЕДСТВ НА СЧЕТЕ ПЛАТЕЛЬЩИКА" _
 )
+
+Const TYPE_MODE    = "KEYS"   ' "KEYS" - печатать как с клавиатуры, "SETTEXT" - запись напрямую
+Const CLEAR_FIELD  = True     ' очищать поле перед вводом
+Const SAME_COLUMN  = True     ' переносить только в поля ниже, начинающиеся в той же колонке
+Const MAX_FIELDS   = 5        ' максимум полей для переноса (включая первое)
+Const CLEAR_REST   = False    ' True - очищать оставшиеся поля, если текст закончился раньше
 ' ===============================================
 
-Dim ps, fso, sh
+Dim ps, oia
 Set ps  = autECLSession.autECLPS
-Set fso = CreateObject("Scripting.FileSystemObject")
-Set sh  = CreateObject("WScript.Shell")
+Set oia = autECLSession.autECLOIA
 
 subMain
 
 Sub subMain()
-    Dim row, col, maxLen, tmp, inF, outF, f, i, p, idx, extra, text
+    Dim row, col, menu, i, p, choice, text
+    Dim fields, cur, pos, s, fRow, fCol, fLen, baseCol, lastRow
+    Dim tRow(), tCol(), tLen(), n, rest, chunk
 
     row = ps.CursorPosRow
     col = ps.CursorPosCol
 
-    maxLen = FieldRoomAtCursor(row, col)
-    If maxLen = 0 Then
-        MsgBox "Курсор не в поле ввода. Поставьте курсор в нужное поле и повторите.", vbExclamation, "Вставка"
-        Exit Sub
-    End If
-    If Not fso.FileExists(MENU_HTA) Then
-        MsgBox "Не найден файл меню: " & MENU_HTA, vbCritical, "Вставка"
-        Exit Sub
-    End If
-
-    ' --- передать пункты в меню ---
-    tmp  = sh.ExpandEnvironmentStrings("%TEMP%")
-    inF  = tmp & "\eq_menu_in.txt"
-    outF = tmp & "\eq_menu_out.txt"
-    If fso.FileExists(outF) Then fso.DeleteFile outF
-
-    Set f = fso.CreateTextFile(inF, True, True)          ' Unicode
-    f.WriteLine CStr(maxLen)
+    ' --- меню ---
+    menu = "Выберите причину:" & vbCrLf & vbCrLf
     For i = 0 To UBound(ACTIONS)
-        p = Split(ACTIONS(i) & "|||", "|")
-        f.WriteLine p(0) & "|" & p(1) & "|" & p(2)
+        p = Split(ACTIONS(i), "|")
+        menu = menu & "  " & (i + 1) & " - " & p(0) & vbCrLf
     Next
-    f.Close
+    menu = menu & vbCrLf & "Введите номер:"
 
-    ' --- показать меню и дождаться выбора ---
-    sh.Run "mshta.exe """ & MENU_HTA & """", 1, True
-    If Not fso.FileExists(outF) Then Exit Sub            ' нажали Esc / закрыли окно
+    choice = InputBox(menu, "Вставка в Equation", "1")
+    If choice = "" Then Exit Sub
+    If Not IsNumeric(choice) Then Exit Sub
+    choice = CInt(choice) - 1
+    If choice < 0 Or choice > UBound(ACTIONS) Then Exit Sub
 
-    Set f = fso.OpenTextFile(outF, 1, False, -1)
-    idx = CInt(Trim(f.ReadLine))
-    extra = ""
-    If Not f.AtEndOfStream Then extra = f.ReadAll
-    f.Close
-    fso.DeleteFile outF
+    p = Split(ACTIONS(choice) & "||", "|")
+    text = Replace(p(1), "{DATE}", CStr(Date))
 
-    ' --- собрать текст ---
-    p = Split(ACTIONS(idx) & "|||", "|")
-    text = Replace(p(2), "{ASK}", extra)
-    text = Replace(text, "{DATE}", CStr(Date))
+    ' --- поля ввода на экране ---
+    fields = InputFields()
+    If UBound(fields) < 0 Then
+        ' список полей недоступен - просто печатаем с позиции курсора
+        TypeAt row, col, text
+    Else
+        ' поле, в котором стоит курсор
+        cur = -1
+        pos = (row - 1) * ps.NumCols + col
+        For i = 0 To UBound(fields)
+            s = Split(fields(i), "|")
+            fRow = CInt(s(0)): fCol = CInt(s(1)): fLen = CInt(s(2))
+            If pos >= (fRow - 1) * ps.NumCols + fCol And pos <= (fRow - 1) * ps.NumCols + fCol + fLen - 1 Then
+                cur = i: Exit For
+            End If
+        Next
+        If cur = -1 Then
+            MsgBox "Курсор не в поле ввода. Поставьте курсор в нужное поле и повторите.", vbExclamation, "Вставка"
+            Exit Sub
+        End If
 
-    If maxLen > 0 And Len(text) > maxLen Then
-        If MsgBox("Текст длиннее поля (" & Len(text) & " > " & maxLen & " символов)." & vbCrLf & _
-                  "Обрезать до:" & vbCrLf & Left(text, maxLen) & " ?", _
-                  vbYesNo + vbQuestion, "Вставка") = vbNo Then Exit Sub
-        text = Left(text, maxLen)
+        ' список полей для заполнения: первое - от курсора, дальше - следующие поля
+        ReDim tRow(MAX_FIELDS - 1): ReDim tCol(MAX_FIELDS - 1): ReDim tLen(MAX_FIELDS - 1)
+        tRow(0) = row
+        tCol(0) = col
+        tLen(0) = (fRow - 1) * ps.NumCols + fCol + fLen - pos
+        baseCol = fCol
+        lastRow = fRow
+        n = 1
+        For i = cur + 1 To UBound(fields)
+            If n >= MAX_FIELDS Then Exit For
+            s = Split(fields(i), "|")
+            If Not SAME_COLUMN Or (CInt(s(1)) = baseCol And CInt(s(0)) > lastRow) Then
+                tRow(n) = CInt(s(0)): tCol(n) = CInt(s(1)): tLen(n) = CInt(s(2))
+                lastRow = tRow(n)
+                n = n + 1
+            End If
+        Next
+
+        ' раскладываем текст по полям с переносом по словам
+        rest = text
+        For i = 0 To n - 1
+            If rest = "" Then
+                If CLEAR_REST Then TypeAt tRow(i), tCol(i), "" Else Exit For
+            Else
+                chunk = NextChunk(rest, tLen(i))
+                TypeAt tRow(i), tCol(i), chunk
+            End If
+        Next
     End If
 
-    ' --- вставить ---
-    ps.SetCursorPos row, col
-    If CLEAR_FIELD Then ps.SendKeys "[eraseeof]"
-    ps.SetText text, row, col
-    If UCase(Trim(p(3))) = "ENTER" Then ps.SendKeys "[enter]"
+    If UCase(Trim(p(2))) = "ENTER" Then ps.SendKeys "[enter]"
 End Sub
 
-' Сколько символов помещается от курсора до конца поля.
-' 0 - курсор не в поле ввода, -1 - определить не удалось
-Function FieldRoomAtCursor(row, col)
-    Dim fl, f
-    FieldRoomAtCursor = -1
+' Отрезать от rest кусок длиной не больше w, по границе слова
+Function NextChunk(rest, w)
+    Dim cut
+    If Len(rest) <= w Then
+        NextChunk = rest
+        rest = ""
+        Exit Function
+    End If
+    cut = InStrRev(Left(rest, w + 1), " ")
+    If cut > 1 Then
+        NextChunk = RTrim(Left(rest, cut - 1))
+        rest = LTrim(Mid(rest, cut + 1))
+    Else
+        NextChunk = Left(rest, w)                ' слово длиннее поля - режем по символам
+        rest = Mid(rest, w + 1)
+    End If
+End Function
+
+' Ввести текст в поле с позиции r, c
+Sub TypeAt(r, c, s)
+    ps.SetCursorPos r, c
+    If TYPE_MODE = "KEYS" Then
+        If CLEAR_FIELD Then ps.SendKeys "[eraseeof]"
+        If s <> "" Then ps.SendKeys Replace(Replace(s, "[", "[["), "]", "]]")
+    Else
+        If CLEAR_FIELD Then
+            ps.SendKeys "[eraseeof]"
+            oia.WaitForInputReady 3000
+            ps.Wait 50
+        End If
+        If s <> "" Then ps.SetText s, r, c
+    End If
+    oia.WaitForInputReady 3000
+    If oia.InputInhibited <> 0 Then ps.SendKeys "[reset]"   ' снять блокировку, если поле не приняло символ
+End Sub
+
+' Все поля ввода экрана: "строка|колонка|длина"
+Function InputFields()
+    Dim fl, i, f, arr(), n
+    InputFields = Array()
+    n = -1
     On Error Resume Next
     Set fl = ps.autECLFieldList
     fl.Refresh
-    Set f = fl.FindFieldByRowCol(row, col)
-    If Err.Number <> 0 Or f Is Nothing Then Err.Clear: Exit Function
-    If f.Protected Then FieldRoomAtCursor = 0: Exit Function
-    FieldRoomAtCursor = f.Length - ((row - f.StartRow) * ps.NumCols + (col - f.StartCol))
+    If Err.Number <> 0 Then Err.Clear: Exit Function
+    ReDim arr(fl.Count)
+    For i = 1 To fl.Count
+        Set f = fl(i)
+        If Err.Number = 0 Then
+            If Not f.Protected Then
+                n = n + 1
+                arr(n) = f.StartRow & "|" & f.StartCol & "|" & f.Length
+            End If
+        End If
+        Err.Clear
+    Next
     On Error GoTo 0
+    If n >= 0 Then
+        ReDim Preserve arr(n)
+        InputFields = arr
+    End If
 End Function
