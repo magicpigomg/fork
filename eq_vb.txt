@@ -1,37 +1,40 @@
 [PCOMM SCRIPT HEADER]
 LANGUAGE=VBSCRIPT
-DESCRIPTION=Equation: сбор полей документа по страницам в файл
+DESCRIPTION=Equation: сбор полей документа по страницам в Excel
 [PCOMM SCRIPT SOURCE]
 OPTION EXPLICIT
 autECLSession.SetConnectionByName(ThisSessionName)
 
 ' ================== НАСТРОЙКИ ==================
-Const OUT_DIR      = "C:\EQ\"
-Const SEP          = ";"
-Const UNICODE_FILE = False        ' True - Unicode, False - ANSI (1251)
-Const MSG_ROW      = 24           ' строка сообщений Equation
-Const TIMEOUT_MS   = 10000
-Const SHOW_MSGBOX  = True
+Const OUT_DIR     = "C:\EQ\"
+Const MSG_ROW     = 24           ' строка сообщений Equation
+Const TIMEOUT_MS  = 10000
+Const SHOW_MSGBOX = True
+
+' Названия полей из сценария, которые подставляются в "Результат"
+Const F_NUM      = "Номер документа"
+Const F_DOC_DATE = "Дата документа"
+Const F_PUT_DATE = "Дата помещения"
+Const F_SUM      = "Сумма"
+Const FORMAT_PUT_DATE = True     ' True - "Дата помещения" тоже форматируется точками
 
 ' ================== СЦЕНАРИЙ ==================
-' Команды (разделитель "|"):
-'   READ|Название|строка|колонка|длина     - прочитать поле по координатам
-'   LABEL|Название|Текст подписи|длина     - прочитать значение после подписи
-'   PGDN                                   - Page Down
-'   PGUP                                   - Page Up
-'   F2 / F12 / F3 / ENTER                  - нажать клавишу
-'   KEY|[pf5]                              - любая клавиша в формате PCOMM
-'   WAIT|Текст                             - ждать появления текста на экране
-'   PAUSE|мс                               - просто пауза
+'   READ|Название|строка|колонка|длина   - прочитать поле по координатам
+'   LABEL|Название|Текст подписи|длина   - прочитать значение после подписи
+'   PGDN / PGUP / ENTER / F2 / F3 / F12  - нажать клавишу
+'   KEY|[pf5]                            - любая клавиша в формате PCOMM
+'   WAIT|Текст                           - ждать появления текста на экране
+'   PAUSE|мс                             - пауза
 Dim STEPS
 STEPS = Array( _
     "READ|Номер документа|4|20|16", _
-    "READ|Дата|5|20|10", _
+    "READ|Дата документа|5|20|8", _
     "READ|Сумма|10|20|18", _
     "PGDN", _
     "READ|Счёт дебета|7|20|20", _
     "READ|Счёт кредита|8|20|20", _
     "PGDN", _
+    "READ|Дата помещения|6|20|8", _
     "LABEL|Назначение|Назначение:|60", _
     "F2", _
     "READ|Доп. реквизит|6|25|30", _
@@ -82,8 +85,10 @@ Sub subMain()
         End Select
     Next
 
+    AddPair "Результат", BuildResult()
     AddPair "Ошибка", errText
-    WriteToFile
+
+    WriteToExcel
 
     If SHOW_MSGBOX Then
         If errText = "" Then
@@ -93,6 +98,58 @@ Sub subMain()
         End If
     End If
 End Sub
+
+' ---------- Колонка "Результат" ----------
+Function BuildResult()
+    Dim putDate
+    putDate = GetValue(F_PUT_DATE)
+    If FORMAT_PUT_DATE Then putDate = FormatEqDate(putDate)
+
+    BuildResult = "ПТ № " & GetValue(F_NUM) & _
+                  " от " & FormatEqDate(GetValue(F_DOC_DATE)) & _
+                  " направлено в АИС ИДО " & putDate & _
+                  " в сумме " & FormatEqSum(GetValue(F_SUM))
+End Function
+
+' "231026" -> "23.10.26", "23102026" -> "23.10.2026"
+Function FormatEqDate(s)
+    s = Replace(Trim(s), " ", "")
+    If InStr(s, ".") > 0 Or Len(s) < 5 Then   ' уже с точками или пусто - не трогаем
+        FormatEqDate = s
+    Else
+        FormatEqDate = Left(s, 2) & "." & Mid(s, 3, 2) & "." & Mid(s, 5)
+    End If
+End Function
+
+' "0000123456" -> "1234,56", "5" -> "0,05"
+Function FormatEqSum(s)
+    Dim sign
+    s = Replace(Trim(s), " ", "")
+    sign = ""
+    If Left(s, 1) = "-" Then sign = "-": s = Mid(s, 2)
+    If Right(s, 1) = "-" Then sign = "-": s = Left(s, Len(s) - 1)   ' минус справа (формат IBM i)
+
+    If s = "" Or InStr(s, ",") > 0 Or InStr(s, ".") > 0 Then
+        FormatEqSum = sign & s                   ' пусто или уже с разделителем
+        Exit Function
+    End If
+
+    Do While Len(s) > 3 And Left(s, 1) = "0"     ' убрать ведущие нули
+        s = Mid(s, 2)
+    Loop
+    Do While Len(s) < 3                          ' минимум "0,05"
+        s = "0" & s
+    Loop
+    FormatEqSum = sign & Left(s, Len(s) - 2) & "," & Right(s, 2)
+End Function
+
+Function GetValue(name)
+    Dim i
+    GetValue = ""
+    For i = 0 To UBound(headers)
+        If headers(i) = name Then GetValue = values(i): Exit Function
+    Next
+End Function
 
 ' ---------- Нажатие клавиши с ожиданием смены экрана ----------
 Function PressKey(k)
@@ -106,7 +163,6 @@ Function PressKey(k)
         Exit Function
     End If
 
-    ' ждём, пока экран реально обновится (до 3 сек)
     t = 0
     Do While ScreenText() = before And t < 3000
         ps.Wait 100
@@ -114,11 +170,9 @@ Function PressKey(k)
     Loop
 
     If ScreenText() = before Then
-        ' экран не сменился: последняя страница или клавиша недоступна
         errText = "Экран не изменился после " & k & ". " & Trim(ps.GetText(MSG_ROW, 1, ps.NumCols))
         Exit Function
     End If
-
     PressKey = True
 End Function
 
@@ -142,23 +196,89 @@ Function GetAfterLabel(label, length)
     Next
 End Function
 
-' ---------- Запись в файл (дописывание) ----------
-Sub WriteToFile()
-    Dim fso, f, fileName, isNew
+' ---------- Запись в Excel (дописывание + автоширина) ----------
+Sub WriteToExcel()
+    Const xlUp = -4162, xlToLeft = -4159, xlOpenXMLWorkbook = 51
+    Dim fso, fileName, xl, wb, ws, w, own, isNew, r, i, col, lastCol
+
     Set fso = CreateObject("Scripting.FileSystemObject")
     If Not fso.FolderExists(OUT_DIR) Then fso.CreateFolder OUT_DIR
+    fileName = OUT_DIR & "eq_docs_" & Year(Date) & Right("0" & Month(Date), 2) & Right("0" & Day(Date), 2) & ".xlsx"
 
-    fileName = OUT_DIR & "eq_docs_" & Year(Date) & Right("0" & Month(Date), 2) & Right("0" & Day(Date), 2) & ".csv"
-    isNew = Not fso.FileExists(fileName)
+    On Error Resume Next
 
-    If UNICODE_FILE Then
-        Set f = fso.OpenTextFile(fileName, 8, True, -1)
-    Else
-        Set f = fso.OpenTextFile(fileName, 8, True, 0)
+    ' 1. Если файл уже открыт у пользователя в Excel, пишем прямо в него
+    Set wb = Nothing
+    Set xl = GetObject(, "Excel.Application")
+    If Err.Number = 0 Then
+        For Each w In xl.Workbooks
+            If LCase(w.FullName) = LCase(fileName) Then Set wb = w
+        Next
     End If
-    If isNew Then f.WriteLine JoinCsv(headers)
-    f.WriteLine JoinCsv(values)
-    f.Close
+    Err.Clear
+
+    ' 2. Иначе открываем свой скрытый экземпляр Excel
+    own = False
+    If wb Is Nothing Then
+        Set xl = CreateObject("Excel.Application")
+        If Err.Number <> 0 Then errText = errText & " | Excel не запускается: " & Err.Description: Exit Sub
+        own = True
+        xl.Visible = False
+        xl.DisplayAlerts = False
+        isNew = Not fso.FileExists(fileName)
+        If isNew Then
+            Set wb = xl.Workbooks.Add
+        Else
+            Set wb = xl.Workbooks.Open(fileName)
+        End If
+    End If
+    Set ws = wb.Worksheets(1)
+
+    ' последняя колонка заголовка и первая свободная строка
+    If ws.Cells(1, 1).Value = "" Then
+        lastCol = 0
+        r = 2
+    Else
+        lastCol = ws.Cells(1, ws.Columns.Count).End(xlToLeft).Column
+        r = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row + 1
+    End If
+
+    ' пишем значения в колонку с таким же заголовком (новые колонки добавляются справа)
+    For i = 0 To UBound(headers)
+        col = 0
+        Dim c
+        For c = 1 To lastCol
+            If ws.Cells(1, c).Value = headers(i) Then col = c: Exit For
+        Next
+        If col = 0 Then
+            lastCol = lastCol + 1
+            col = lastCol
+            ws.Cells(1, col).Value = headers(i)
+            ws.Cells(1, col).Font.Bold = True
+        End If
+        ws.Cells(r, col).NumberFormat = "@"       ' текст: не терять нули и длинные номера
+        ws.Cells(r, col).Value = values(i)
+    Next
+
+    ws.Columns.AutoFit                            ' ширина под содержимое
+
+    If own Then
+        If isNew Then
+            wb.SaveAs fileName, xlOpenXMLWorkbook
+        Else
+            wb.Save
+        End If
+        wb.Close False
+        xl.Quit
+    Else
+        wb.Save
+    End If
+
+    If Err.Number <> 0 Then
+        errText = errText & " | Ошибка Excel: " & Err.Description
+        If own Then wb.Close False: xl.Quit
+    End If
+    On Error GoTo 0
 End Sub
 
 ' ---------- Вспомогательные ----------
@@ -168,17 +288,3 @@ Sub AddPair(h, v)
     ReDim Preserve values(UBound(values) + 1)
     values(UBound(values)) = v
 End Sub
-
-Function JoinCsv(arr)
-    Dim i, s, v
-    s = ""
-    For i = 0 To UBound(arr)
-        v = CStr(arr(i))
-        If InStr(v, SEP) > 0 Or InStr(v, """") > 0 Then
-            v = """" & Replace(v, """", """""") & """"
-        End If
-        If i > 0 Then s = s & SEP
-        s = s & v
-    Next
-    JoinCsv = s
-End Function
