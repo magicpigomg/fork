@@ -1,86 +1,132 @@
 [PCOMM SCRIPT HEADER]
 LANGUAGE=VBSCRIPT
-DESCRIPTION=Equation: сохранить поля документа в файл
+DESCRIPTION=Equation: сбор полей документа по страницам в файл
 [PCOMM SCRIPT SOURCE]
 OPTION EXPLICIT
 autECLSession.SetConnectionByName(ThisSessionName)
 
 ' ================== НАСТРОЙКИ ==================
-Const OUT_DIR  = "C:\EQ\"            ' папка для файлов
-Const SEP      = ";"                 ' разделитель (для русского Excel - ";")
-Const UNICODE_FILE = False           ' True - Unicode (UTF-16), False - ANSI (Windows-1251)
+Const OUT_DIR      = "C:\EQ\"
+Const SEP          = ";"
+Const UNICODE_FILE = False        ' True - Unicode, False - ANSI (1251)
+Const MSG_ROW      = 24           ' строка сообщений Equation
+Const TIMEOUT_MS   = 10000
+Const SHOW_MSGBOX  = True
 
-' Поля: "Название|строка|колонка|длина"
-' Координаты берите со своего экрана (позиция курсора видна в правом нижнем углу PCOMM)
-Dim FIELDS
-FIELDS = Array( _
-    "Номер документа|4|20|16", _
-    "Дата|5|20|10", _
-    "Счёт дебета|7|20|20", _
-    "Счёт кредита|8|20|20", _
-    "Сумма|10|20|18", _
-    "Валюта|10|45|3", _
-    "Назначение|12|20|60" _
-)
-
-' Поля, которые ищутся по подписи: "Название|Текст подписи|длина значения"
-' Подходит, если поле "плавает" по экрану. Значение берётся сразу после подписи.
-Dim LABEL_FIELDS
-LABEL_FIELDS = Array( _
-    "Получатель|Получатель:|40" _
+' ================== СЦЕНАРИЙ ==================
+' Команды (разделитель "|"):
+'   READ|Название|строка|колонка|длина     - прочитать поле по координатам
+'   LABEL|Название|Текст подписи|длина     - прочитать значение после подписи
+'   PGDN                                   - Page Down
+'   PGUP                                   - Page Up
+'   F2 / F12 / F3 / ENTER                  - нажать клавишу
+'   KEY|[pf5]                              - любая клавиша в формате PCOMM
+'   WAIT|Текст                             - ждать появления текста на экране
+'   PAUSE|мс                               - просто пауза
+Dim STEPS
+STEPS = Array( _
+    "READ|Номер документа|4|20|16", _
+    "READ|Дата|5|20|10", _
+    "READ|Сумма|10|20|18", _
+    "PGDN", _
+    "READ|Счёт дебета|7|20|20", _
+    "READ|Счёт кредита|8|20|20", _
+    "PGDN", _
+    "LABEL|Назначение|Назначение:|60", _
+    "F2", _
+    "READ|Доп. реквизит|6|25|30", _
+    "F12" _
 )
 ' ===============================================
 
-Dim ps, oia
+Dim ps, oia, headers, values, errText
 Set ps  = autECLSession.autECLPS
 Set oia = autECLSession.autECLOIA
 
 subMain
 
 Sub subMain()
-    Dim fso, f, fileName, isNew, headers, values, i, p, v
-
-    oia.WaitForInputReady 10000
-
-    ' --- собрать значения ---
+    Dim i, p, cmd
     headers = Array("Дата выгрузки")
-    values  = Array(Now())
+    values  = Array(CStr(Now()))
+    errText = ""
 
-    For i = 0 To UBound(FIELDS)
-        p = Split(FIELDS(i), "|")
-        v = Trim(ps.GetText(CInt(p(1)), CInt(p(2)), CInt(p(3))))
-        AddItem headers, p(0)
-        AddItem values, v
+    oia.WaitForInputReady TIMEOUT_MS
+
+    For i = 0 To UBound(STEPS)
+        p = Split(STEPS(i), "|")
+        cmd = UCase(Trim(p(0)))
+
+        Select Case cmd
+            Case "READ"
+                AddPair p(1), Trim(ps.GetText(CInt(p(2)), CInt(p(3)), CInt(p(4))))
+            Case "LABEL"
+                AddPair p(1), GetAfterLabel(p(2), CInt(p(3)))
+            Case "PGDN":  If Not PressKey("[pagedn]") Then Exit For
+            Case "PGUP":  If Not PressKey("[pageup]") Then Exit For
+            Case "ENTER": If Not PressKey("[enter]")  Then Exit For
+            Case "F2":    If Not PressKey("[pf2]")    Then Exit For
+            Case "F3":    If Not PressKey("[pf3]")    Then Exit For
+            Case "F12":   If Not PressKey("[pf12]")   Then Exit For
+            Case "KEY":   If Not PressKey(p(1))       Then Exit For
+            Case "WAIT"
+                If Not ps.WaitForString(p(1), 0, 0, TIMEOUT_MS, True, False) Then
+                    errText = "Не дождались текста: " & p(1)
+                    Exit For
+                End If
+            Case "PAUSE"
+                ps.Wait CLng(p(1))
+            Case Else
+                errText = "Неизвестная команда: " & STEPS(i)
+                Exit For
+        End Select
     Next
 
-    For i = 0 To UBound(LABEL_FIELDS)
-        p = Split(LABEL_FIELDS(i), "|")
-        AddItem headers, p(0)
-        AddItem values, GetAfterLabel(p(1), CInt(p(2)))
-    Next
+    AddPair "Ошибка", errText
+    WriteToFile
 
-    ' --- запись в файл (дописывание) ---
-    Set fso = CreateObject("Scripting.FileSystemObject")
-    If Not fso.FolderExists(OUT_DIR) Then fso.CreateFolder OUT_DIR
-
-    fileName = OUT_DIR & "eq_docs_" & Year(Date) & Right("0" & Month(Date), 2) & Right("0" & Day(Date), 2) & ".csv"
-    isNew = Not fso.FileExists(fileName)
-
-    ' 8 = ForAppending, True = создать, если нет; -1 = Unicode, 0 = ANSI
-    If UNICODE_FILE Then
-        Set f = fso.OpenTextFile(fileName, 8, True, -1)
-    Else
-        Set f = fso.OpenTextFile(fileName, 8, True, 0)
+    If SHOW_MSGBOX Then
+        If errText = "" Then
+            MsgBox "Документ записан в файл", vbInformation, "Equation"
+        Else
+            MsgBox "Записано с ошибкой:" & vbCrLf & errText, vbExclamation, "Equation"
+        End If
     End If
-
-    If isNew Then f.WriteLine JoinCsv(headers)
-    f.WriteLine JoinCsv(values)
-    f.Close
-
-    MsgBox "Записано в " & fileName, vbInformation, "Equation"
 End Sub
 
-' Найти подпись на экране и вернуть текст сразу за ней
+' ---------- Нажатие клавиши с ожиданием смены экрана ----------
+Function PressKey(k)
+    Dim before, t
+    PressKey = False
+    before = ScreenText()
+
+    ps.SendKeys k
+    If Not oia.WaitForInputReady(TIMEOUT_MS) Then
+        errText = "Таймаут после " & k
+        Exit Function
+    End If
+
+    ' ждём, пока экран реально обновится (до 3 сек)
+    t = 0
+    Do While ScreenText() = before And t < 3000
+        ps.Wait 100
+        t = t + 100
+    Loop
+
+    If ScreenText() = before Then
+        ' экран не сменился: последняя страница или клавиша недоступна
+        errText = "Экран не изменился после " & k & ". " & Trim(ps.GetText(MSG_ROW, 1, ps.NumCols))
+        Exit Function
+    End If
+
+    PressKey = True
+End Function
+
+Function ScreenText()
+    ScreenText = ps.GetText(1, 1, ps.NumRows * ps.NumCols)
+End Function
+
+' ---------- Поиск значения по подписи ----------
 Function GetAfterLabel(label, length)
     Dim r, c, rowText
     GetAfterLabel = ""
@@ -96,13 +142,33 @@ Function GetAfterLabel(label, length)
     Next
 End Function
 
-' Добавить элемент в массив
-Sub AddItem(arr, item)
-    ReDim Preserve arr(UBound(arr) + 1)
-    arr(UBound(arr)) = item
+' ---------- Запись в файл (дописывание) ----------
+Sub WriteToFile()
+    Dim fso, f, fileName, isNew
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    If Not fso.FolderExists(OUT_DIR) Then fso.CreateFolder OUT_DIR
+
+    fileName = OUT_DIR & "eq_docs_" & Year(Date) & Right("0" & Month(Date), 2) & Right("0" & Day(Date), 2) & ".csv"
+    isNew = Not fso.FileExists(fileName)
+
+    If UNICODE_FILE Then
+        Set f = fso.OpenTextFile(fileName, 8, True, -1)
+    Else
+        Set f = fso.OpenTextFile(fileName, 8, True, 0)
+    End If
+    If isNew Then f.WriteLine JoinCsv(headers)
+    f.WriteLine JoinCsv(values)
+    f.Close
 End Sub
 
-' Склеить строку CSV с экранированием кавычек и разделителя
+' ---------- Вспомогательные ----------
+Sub AddPair(h, v)
+    ReDim Preserve headers(UBound(headers) + 1)
+    headers(UBound(headers)) = h
+    ReDim Preserve values(UBound(values) + 1)
+    values(UBound(values)) = v
+End Sub
+
 Function JoinCsv(arr)
     Dim i, s, v
     s = ""
