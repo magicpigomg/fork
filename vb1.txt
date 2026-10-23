@@ -1,0 +1,68 @@
+[PCOMM SCRIPT HEADER]
+LANGUAGE=VBSCRIPT
+DESCRIPTION=Тест: проверка значений из файла на экране Equation
+[PCOMM SCRIPT SOURCE]
+OPTION EXPLICIT
+autECLSession.SetConnectionByName(ThisSessionName)
+
+' ================== НАСТРОЙКИ ==================
+Const LIST_FILE    = "C:\EQ\check.txt"   ' одно значение на строку
+Const FILE_CHARSET = "utf-8"             ' если кракозябры - "windows-1251"
+Const SHOW_IF_NONE = True                ' показывать окно, если ничего не найдено
+' ===============================================
+
+Dim ps
+Set ps = autECLSession.autECLPS
+
+subMain
+
+Sub subMain()
+    Dim lines, i, v, r, rowText, found, rowsFound
+
+    autECLSession.autECLOIA.WaitForInputReady 10000
+
+    lines = ReadLines(LIST_FILE)
+    If UBound(lines) < 0 Then Exit Sub
+
+    found = ""
+    For i = 0 To UBound(lines)
+        v = Trim(lines(i))
+        If v <> "" Then
+            rowsFound = ""
+            For r = 1 To ps.NumRows
+                rowText = ps.GetText(r, 1, ps.NumCols)
+                If InStr(1, rowText, v, vbTextCompare) > 0 Then
+                    If rowsFound <> "" Then rowsFound = rowsFound & ", "
+                    rowsFound = rowsFound & r
+                End If
+            Next
+            If rowsFound <> "" Then
+                found = found & "• " & v & "   (строка экрана: " & rowsFound & ")" & vbCrLf
+            End If
+        End If
+    Next
+
+    If found <> "" Then
+        MsgBox "На экране найдены значения из списка:" & vbCrLf & vbCrLf & found, _
+               vbExclamation + vbSystemModal, "ВНИМАНИЕ"
+    ElseIf SHOW_IF_NONE Then
+        MsgBox "Совпадений нет", vbInformation, "Проверка"
+    End If
+End Sub
+
+Function ReadLines(path)
+    Dim st, txt
+    ReadLines = Array()
+    If Not CreateObject("Scripting.FileSystemObject").FileExists(path) Then
+        MsgBox "Файл не найден: " & path, vbCritical, "Проверка"
+        Exit Function
+    End If
+    Set st = CreateObject("ADODB.Stream")
+    st.Type = 2
+    st.Charset = FILE_CHARSET
+    st.Open
+    st.LoadFromFile path
+    txt = st.ReadText
+    st.Close
+    ReadLines = Split(Replace(txt, vbCr, ""), vbLf)
+End Function
