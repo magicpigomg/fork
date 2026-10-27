@@ -48,6 +48,8 @@ namespace MultiTool.Models
 
         // «Отзыв документа»: после метки ищется префикс (BY), от его начала пропускаем N символов и берём M.
         public string RevocationKeyword { get; set; } = "Отзыв документа";
+        // «Заявление на отзыв платежной инструкции»: счёт плательщика берётся по тому же правилу (метка, префикс, пропуск, длина).
+        public string RevocationRequestKeyword { get; set; } = "Заявление на отзыв платежной инструкции";
         public string PayerAccountLabel { get; set; } = "Номер счета плательщика";
         public string IbanPrefix { get; set; } = "BY";
         public int IbanSkip { get; set; } = 8;

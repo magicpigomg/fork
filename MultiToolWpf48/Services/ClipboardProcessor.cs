@@ -38,6 +38,11 @@ namespace MultiTool.Services
             if (Matches(text, s.PaymentOrderKeyword) && Matches(text, s.ControlCodeKeyword))
                 return Wrap("Платёжное поручение", ExtractControlCode(text, s));
 
+            // «Заявление на отзыв платежной инструкции»: счёт плательщика берётся так же, как у «Отзыва документа».
+            // Проверяется раньше «Заявления», иначе слово «Заявление» в заголовке сработало бы как другое правило.
+            if (Matches(text, s.RevocationRequestKeyword))
+                return Wrap("Заявление на отзыв", ExtractIban(text, s));
+
             if (Matches(text, s.RevocationKeyword))
                 return Wrap("Отзыв документа", ExtractIban(text, s));
 
@@ -118,7 +123,11 @@ namespace MultiTool.Services
             if (text.Length - by < skip + length)
                 return Fail("После «" + s.IbanPrefix + "» слишком мало символов");
 
-            return Ok(text.Substring(by + skip, length));
+            string value = text.Substring(by + skip, length);
+            // Номер короче нужного: выбранные символы «зашли» бы на следующую строку документа.
+            if (value.IndexOfAny(new[] { '\r', '\n' }) >= 0)
+                return Fail("Номер счёта после «" + s.IbanPrefix + "» короче нужного (в строке меньше символов)");
+            return Ok(value);
         }
 
         /// <summary>

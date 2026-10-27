@@ -54,9 +54,10 @@ namespace MultiTool.Views
                 Number("Символов после № (общее для правил с №)", nameof(AppSettings.TakeAfterMarker)),
                 Number("Если в тексте три №: брать по счёту (0 — выкл.)", nameof(AppSettings.OccurrenceWhenThreeMarkers))));
 
-            rules.Children.Add(Subtitle("Отзыв документа — по номеру счёта (BY…)"));
+            rules.Children.Add(Subtitle("Отзыв документа и заявление на отзыв — по номеру счёта (BY…)"));
             var r1 = NewWrap();
-            r1.Children.Add(Text("Ключевая фраза", nameof(AppSettings.RevocationKeyword), 260));
+            r1.Children.Add(Text("Ключевая фраза «Отзыв»", nameof(AppSettings.RevocationKeyword), 260));
+            r1.Children.Add(Text("Ключевая фраза «Заявление на отзыв»", nameof(AppSettings.RevocationRequestKeyword), 330));
             r1.Children.Add(Text("Метка перед счётом", nameof(AppSettings.PayerAccountLabel), 260));
             r1.Children.Add(Text("Префикс", nameof(AppSettings.IbanPrefix), 100));
             r1.Children.Add(Number("Пропустить", nameof(AppSettings.IbanSkip)));
