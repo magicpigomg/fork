@@ -39,6 +39,13 @@ namespace MultiTool.Models
         /// <summary>Для правил с №: сколько символов берём после №.</summary>
         public int TakeAfterMarker { get; set; } = 28;
 
+        // «ПЛАТЕЖНОЕ ПОРУЧЕНИЕ» + «Прошел предварительный контроль» (проверяется первым):
+        // в буфер копируется код вида «ABOWD» + цифры до конца кода; общая длина кода — ControlCodeLength.
+        public string PaymentOrderKeyword { get; set; } = "ПЛАТЕЖНОЕ ПОРУЧЕНИЕ";
+        public string PreControlKeyword { get; set; } = "Прошел предварительный контроль";
+        public string ControlCodePrefix { get; set; } = "ABOWD";
+        public int ControlCodeLength { get; set; } = 16;
+
         // «Отзыв документа»: после метки ищется префикс (BY), от его начала пропускаем N символов и берём M.
         public string RevocationKeyword { get; set; } = "Отзыв документа";
         public string PayerAccountLabel { get; set; } = "Номер счета плательщика";
