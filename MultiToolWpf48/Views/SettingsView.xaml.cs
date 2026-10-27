@@ -51,8 +51,8 @@ namespace MultiTool.Views
                 "Тип документа определяется по ключевым словам в скопированном тексте. Проверка идёт сверху вниз: отзыв → заявление → распоряжение. " +
                 "Регистр, лишние пробелы и «е/ё» не важны.");
             rules.Children.Add(Row(
-                Number("Символов после № (общее для правил с №)", nameof(AppSettings.TakeAfterMarker)),
-                Number("Если в тексте три №: брать по счёту (0 — выкл.)", nameof(AppSettings.OccurrenceWhenThreeMarkers))));
+                Number("Символов после № (для всех №)", nameof(AppSettings.TakeAfterMarker)),
+                Number("Три №: брать по счёту (0 — выкл.)", nameof(AppSettings.OccurrenceWhenThreeMarkers))));
 
             rules.Children.Add(Subtitle("Отзыв документа и заявление на отзыв — по номеру счёта (BY…)"));
             var r1 = NewWrap();
@@ -62,7 +62,10 @@ namespace MultiTool.Views
             r1.Children.Add(Text("Префикс", nameof(AppSettings.IbanPrefix), 100));
             r1.Children.Add(Number("Пропустить", nameof(AppSettings.IbanSkip)));
             r1.Children.Add(Number("Взять", nameof(AppSettings.IbanLength)));
+            r1.Children.Add(Number("Весь счёт: символов", nameof(AppSettings.IbanFullLength)));
             rules.Children.Add(r1);
+            rules.Children.Add(Switch("Выделять весь счёт (с BY): включено — весь номер, выключено — часть после ALFA",
+                nameof(AppSettings.IbanWholeAccount)));
 
             rules.Children.Add(Subtitle("Заявление с приостанавливаемым распоряжением"));
             var r2 = NewWrap();
