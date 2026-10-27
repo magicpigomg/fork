@@ -62,6 +62,8 @@ namespace MultiTool.Models
         // «Заявление» + «Номер приостанавливаемого распоряжения»
         public string StatementKeyword { get; set; } = "Заявление";
         public string SuspendedKeyword { get; set; } = "Номер приостанавливаемого распоряжения";
+        // Вторая фраза того же правила: «Заявление на приостановление накопления денежных средств…» без слов «Номер приостанавливаемого распоряжения».
+        public string SuspendedAltKeyword { get; set; } = "приостановление накопления денежных средств";
         public int SuspendedOccurrence { get; set; } = 2;
         public int SuspendedSkip { get; set; } = 8;
         public int SuspendedLength { get; set; } = 13;

@@ -48,7 +48,7 @@ namespace MultiTool.Services
 
             if (Matches(text, s.StatementKeyword))
             {
-                if (Matches(text, s.SuspendedKeyword))
+                if (Matches(text, s.SuspendedKeyword) || Matches(text, s.SuspendedAltKeyword))
                 {
                     int occurrence = EffectiveOccurrence(text, s, s.SuspendedOccurrence, false);
                     return Wrap("Заявление (приостановление)" + OccurrenceNote(occurrence, s.SuspendedOccurrence),

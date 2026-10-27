@@ -74,6 +74,7 @@ namespace MultiTool.Views
             var r2 = NewWrap();
             r2.Children.Add(Text("Ключевая фраза «Заявление»", nameof(AppSettings.StatementKeyword), 260));
             r2.Children.Add(Text("Доп. фраза", nameof(AppSettings.SuspendedKeyword), 330));
+            r2.Children.Add(Text("Или доп. фраза", nameof(AppSettings.SuspendedAltKeyword), 330));
             r2.Children.Add(Number("Какой по счёту №", nameof(AppSettings.SuspendedOccurrence)));
             r2.Children.Add(Number("Пропустить", nameof(AppSettings.SuspendedSkip)));
             r2.Children.Add(Number("Взять", nameof(AppSettings.SuspendedLength)));
