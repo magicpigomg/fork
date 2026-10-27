@@ -40,8 +40,11 @@ namespace MultiTool.Services
             if (Matches(text, s.StatementKeyword))
             {
                 if (Matches(text, s.SuspendedKeyword))
-                    return Wrap("Заявление (приостановление)",
-                        ExtractAfterMarker(text, s, s.SuspendedOccurrence, s.SuspendedSkip, s.SuspendedLength));
+                {
+                    int occurrence = EffectiveOccurrence(text, s, s.SuspendedOccurrence);
+                    return Wrap("Заявление (приостановление)" + OccurrenceNote(occurrence, s.SuspendedOccurrence),
+                        ExtractAfterMarker(text, s, occurrence, s.SuspendedSkip, s.SuspendedLength));
+                }
 
                 return Wrap("Заявление",
                     ExtractAfterMarker(text, s, s.StatementOccurrence, s.StatementSkip, s.StatementLength));
@@ -49,11 +52,41 @@ namespace MultiTool.Services
 
             // Проверяется последним, чтобы не менять поведение «Заявления».
             if (Matches(text, s.OrderKeyword))
-                return Wrap("Распоряжение",
-                    ExtractAfterMarker(text, s, s.OrderOccurrence, s.OrderSkip, s.OrderLength));
+            {
+                int occurrence = EffectiveOccurrence(text, s, s.OrderOccurrence);
+                return Wrap("Распоряжение" + OccurrenceNote(occurrence, s.OrderOccurrence),
+                    ExtractAfterMarker(text, s, occurrence, s.OrderSkip, s.OrderLength));
+            }
 
             return new ExtractResult(false, "", "",
                 "Тип документа не определён (нет «" + s.RevocationKeyword + "» / «" + s.StatementKeyword + "» / «" + s.OrderKeyword + "»)");
+        }
+
+        /// <summary>
+        /// Какой по счёту № брать. Обычно — как в настройках, но если в тексте три и более «№» (например, «Завод №1»)
+        /// и правило берёт второй №, то берётся третий (число — в настройке OccurrenceWhenThreeMarkers).
+        /// </summary>
+        private static int EffectiveOccurrence(string text, AppSettings s, int configured)
+        {
+            if (configured == 2 && s.OccurrenceWhenThreeMarkers > configured && CountMarkers(text) >= 3)
+                return s.OccurrenceWhenThreeMarkers;
+            return configured;
+        }
+
+        private static int CountMarkers(string text)
+        {
+            int count = 0;
+            foreach (char c in text)
+            {
+                if (c == Marker) count++;
+            }
+            return count;
+        }
+
+        /// <summary>Пометка для статуса, если вместо обычного № взят другой.</summary>
+        private static string OccurrenceNote(int used, int configured)
+        {
+            return used == configured ? "" : " (№" + used + ")";
         }
 
         private static ExtractResult Wrap(string kind, Tuple<string, string> r)
