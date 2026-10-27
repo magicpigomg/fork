@@ -54,9 +54,9 @@ namespace MultiTool.Models
         public string IbanPrefix { get; set; } = "BY";
         public int IbanSkip { get; set; } = 8;
         public int IbanLength { get; set; } = 13;
-        // «Выделять весь счёт»: true — от префикса (BY) берётся весь номер (IbanFullLength символов),
-        // false — как раньше: пропустить IbanSkip и взять IbanLength символов (13 после ALFA).
-        public bool IbanWholeAccount { get; set; } = false;
+        // «Заявление на отзыв»: true — от префикса (BY) берётся весь номер (IbanFullLength символов),
+        // false — пропустить IbanSkip и взять IbanLength символов (13 после ALFA). «Отзыв документа» всегда берёт 13 после ALFA.
+        public bool RevocationRequestWholeAccount { get; set; } = false;
         public int IbanFullLength { get; set; } = 28;
 
         // «Заявление» + «Номер приостанавливаемого распоряжения»
