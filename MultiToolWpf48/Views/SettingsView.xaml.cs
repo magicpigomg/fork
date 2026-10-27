@@ -64,8 +64,8 @@ namespace MultiTool.Views
             r1.Children.Add(Number("Взять", nameof(AppSettings.IbanLength)));
             r1.Children.Add(Number("Весь счёт: символов", nameof(AppSettings.IbanFullLength)));
             rules.Children.Add(r1);
-            rules.Children.Add(Switch("Выделять весь счёт (с BY): включено — весь номер, выключено — часть после ALFA",
-                nameof(AppSettings.IbanWholeAccount)));
+            rules.Children.Add(Switch("Заявление на отзыв: выделять весь счёт (с BY) — включено весь номер, выключено часть после ALFA",
+                nameof(AppSettings.RevocationRequestWholeAccount)));
 
             rules.Children.Add(Subtitle("Заявление с приостанавливаемым распоряжением"));
             var r2 = NewWrap();

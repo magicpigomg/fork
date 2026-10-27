@@ -41,10 +41,10 @@ namespace MultiTool.Services
             // «Заявление на отзыв платежной инструкции»: счёт плательщика берётся так же, как у «Отзыва документа».
             // Проверяется раньше «Заявления», иначе слово «Заявление» в заголовке сработало бы как другое правило.
             if (Matches(text, s.RevocationRequestKeyword))
-                return Wrap("Заявление на отзыв", ExtractIban(text, s));
+                return Wrap("Заявление на отзыв", ExtractIban(text, s, s.RevocationRequestWholeAccount));
 
             if (Matches(text, s.RevocationKeyword))
-                return Wrap("Отзыв документа", ExtractIban(text, s));
+                return Wrap("Отзыв документа", ExtractIban(text, s, false));
 
             if (Matches(text, s.StatementKeyword))
             {
@@ -109,7 +109,7 @@ namespace MultiTool.Services
 
         private static Tuple<string, string> Fail(string error) { return Tuple.Create((string)null, error); }
 
-        private static Tuple<string, string> ExtractIban(string text, AppSettings s)
+        private static Tuple<string, string> ExtractIban(string text, AppSettings s, bool wholeAccount)
         {
             Match label = BuildRegex(s.PayerAccountLabel).Match(text);
             if (!label.Success)
@@ -119,9 +119,9 @@ namespace MultiTool.Services
             if (by < 0)
                 return Fail("После «" + s.PayerAccountLabel + "» нет «" + s.IbanPrefix + "»");
 
-            // «Выделять весь счёт»: от префикса берётся весь номер; иначе — только часть после банка (ALFA).
-            int skip = s.IbanWholeAccount ? 0 : Math.Max(0, s.IbanSkip);
-            int length = Math.Max(0, s.IbanWholeAccount ? s.IbanFullLength : s.IbanLength);
+            // wholeAccount: от префикса берётся весь номер; иначе — только часть после банка (ALFA).
+            int skip = wholeAccount ? 0 : Math.Max(0, s.IbanSkip);
+            int length = Math.Max(0, wholeAccount ? s.IbanFullLength : s.IbanLength);
             if (text.Length - by < skip + length)
                 return Fail("После «" + s.IbanPrefix + "» слишком мало символов");
 
