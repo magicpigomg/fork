@@ -119,7 +119,9 @@ namespace MultiTool.Services
             if (by < 0)
                 return Fail("После «" + s.PayerAccountLabel + "» нет «" + s.IbanPrefix + "»");
 
-            int skip = Math.Max(0, s.IbanSkip), length = Math.Max(0, s.IbanLength);
+            // «Выделять весь счёт»: от префикса берётся весь номер; иначе — только часть после банка (ALFA).
+            int skip = s.IbanWholeAccount ? 0 : Math.Max(0, s.IbanSkip);
+            int length = Math.Max(0, s.IbanWholeAccount ? s.IbanFullLength : s.IbanLength);
             if (text.Length - by < skip + length)
                 return Fail("После «" + s.IbanPrefix + "» слишком мало символов");
 
