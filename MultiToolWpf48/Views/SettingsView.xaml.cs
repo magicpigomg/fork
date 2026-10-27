@@ -53,6 +53,9 @@ namespace MultiTool.Views
             rules.Children.Add(Row(
                 Number("Символов после № (для всех №)", nameof(AppSettings.TakeAfterMarker)),
                 Number("Три №: брать по счёту (0 — выкл.)", nameof(AppSettings.OccurrenceWhenThreeMarkers))));
+            var rBooking = NewWrap();
+            rBooking.Children.Add(Text("Три №, но берётся второй, если в тексте есть фраза", nameof(AppSettings.BookingOrderKeyword), 560));
+            rules.Children.Add(rBooking);
 
             rules.Children.Add(Subtitle("Отзыв документа и заявление на отзыв — по номеру счёта (BY…)"));
             var r1 = NewWrap();

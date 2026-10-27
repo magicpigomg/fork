@@ -83,6 +83,12 @@ namespace MultiTool.Models
         /// </summary>
         public int OccurrenceWhenThreeMarkers { get; set; } = 3;
 
+        /// <summary>
+        /// Если в тексте есть эта фраза (распоряжение на бронирование денежных средств), правило «три №» не применяется:
+        /// берётся второй № как обычно. Пусто — проверка отключена.
+        /// </summary>
+        public string BookingOrderKeyword { get; set; } = "распоряжение на бронирование денежных средств для осуществления платежей";
+
         // ── Файлы приостановления ───────────────────────────────────────────────
         public string DatePath { get; set; } = DefaultFile("date.txt");
         public string PriostanovleniePath { get; set; } = DefaultFile("priostanovlenie.txt");
