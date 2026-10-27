@@ -50,7 +50,9 @@ namespace MultiTool.Views
             var rules = AddCard("Правила разбора буфера (F1)",
                 "Тип документа определяется по ключевым словам в скопированном тексте. Проверка идёт сверху вниз: отзыв → заявление → распоряжение. " +
                 "Регистр, лишние пробелы и «е/ё» не важны.");
-            rules.Children.Add(Number("Символов после № (общее для правил с №)", nameof(AppSettings.TakeAfterMarker)));
+            rules.Children.Add(Row(
+                Number("Символов после № (общее для правил с №)", nameof(AppSettings.TakeAfterMarker)),
+                Number("Если в тексте три №: брать по счёту (0 — выкл.)", nameof(AppSettings.OccurrenceWhenThreeMarkers))));
 
             rules.Children.Add(Subtitle("Отзыв документа — по номеру счёта (BY…)"));
             var r1 = NewWrap();

@@ -64,6 +64,12 @@ namespace MultiTool.Models
         public int OrderSkip { get; set; } = 9;
         public int OrderLength { get; set; } = 13;
 
+        /// <summary>
+        /// Если в тексте три и более «№» (например, «Завод №1»), правила, которые обычно берут второй №
+        /// (заявление с приостановлением и распоряжение), берут вместо него этот по счёту. 0 — отключено.
+        /// </summary>
+        public int OccurrenceWhenThreeMarkers { get; set; } = 3;
+
         // ── Файлы приостановления ───────────────────────────────────────────────
         public string DatePath { get; set; } = DefaultFile("date.txt");
         public string PriostanovleniePath { get; set; } = DefaultFile("priostanovlenie.txt");
