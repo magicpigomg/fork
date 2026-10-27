@@ -34,6 +34,10 @@ namespace MultiTool.Services
 
         public static ExtractResult Extract(string text, AppSettings s)
         {
+            // «ПЛАТЕЖНОЕ ПОРУЧЕНИЕ» + «Прошел предварительный контроль» — копируется код «ABOWD…».
+            if (Matches(text, s.PaymentOrderKeyword) && Matches(text, s.PreControlKeyword))
+                return Wrap("ПП (предварительный контроль)", ExtractControlCode(text, s));
+
             if (Matches(text, s.RevocationKeyword))
                 return Wrap("Отзыв документа", ExtractIban(text, s));
 
@@ -82,6 +86,31 @@ namespace MultiTool.Services
                 return Fail("После «" + s.IbanPrefix + "» слишком мало символов");
 
             return Ok(text.Substring(by + skip, length));
+        }
+
+        /// <summary>
+        /// Код вида «ABOWD» + цифры до конца кода. Общая длина кода (вместе с префиксом) должна быть равна
+        /// ControlCodeLength; если найденный код другой длины — ошибка с подробностями.
+        /// </summary>
+        private static Tuple<string, string> ExtractControlCode(string text, AppSettings s)
+        {
+            string prefix = (s.ControlCodePrefix ?? "").Trim();
+            if (prefix.Length == 0)
+                return Fail("Не задан префикс кода (Настройки → Правила разбора буфера)");
+
+            MatchCollection matches = Regex.Matches(text, Regex.Escape(prefix) + @"\d+",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (matches.Count == 0)
+                return Fail("Не найден код «" + prefix + "» с цифрами");
+
+            foreach (Match m in matches)
+            {
+                if (m.Value.Length == s.ControlCodeLength) return Ok(m.Value);
+            }
+
+            Match first = matches[0];
+            return Fail("Найден код «" + first.Value + "» длиной " + first.Value.Length +
+                        " симв., а нужно " + s.ControlCodeLength);
         }
 
         private static Tuple<string, string> ExtractAfterMarker(
