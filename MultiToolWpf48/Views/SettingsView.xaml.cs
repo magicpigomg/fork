@@ -87,10 +87,10 @@ namespace MultiTool.Views
             r4.Children.Add(Number("Взять", nameof(AppSettings.OrderLength)));
             rules.Children.Add(r4);
 
-            rules.Children.Add(Subtitle("Платёжное поручение, прошедшее предварительный контроль (проверяется первым)"));
+            rules.Children.Add(Subtitle("Платежное поручение"));
             var r5 = NewWrap();
             r5.Children.Add(Text("Ключевая фраза", nameof(AppSettings.PaymentOrderKeyword), 260));
-            r5.Children.Add(Text("Признак «прошёл контроль»", nameof(AppSettings.PreControlKeyword), 330));
+            r5.Children.Add(Text("Признак", nameof(AppSettings.ControlCodeKeyword), 330));
             r5.Children.Add(Text("Префикс кода", nameof(AppSettings.ControlCodePrefix), 140));
             r5.Children.Add(Number("Общая длина кода", nameof(AppSettings.ControlCodeLength)));
             rules.Children.Add(r5);

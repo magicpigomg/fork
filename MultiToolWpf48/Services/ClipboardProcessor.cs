@@ -34,9 +34,9 @@ namespace MultiTool.Services
 
         public static ExtractResult Extract(string text, AppSettings s)
         {
-            // «ПЛАТЕЖНОЕ ПОРУЧЕНИЕ» + «Прошел предварительный контроль» — копируется код «ABOWD…».
-            if (Matches(text, s.PaymentOrderKeyword) && Matches(text, s.PreControlKeyword))
-                return Wrap("ПП (предварительный контроль)", ExtractControlCode(text, s));
+            // «ПЛАТЕЖНОЕ ПОРУЧЕНИЕ» + «Фактический бенефициар» — копируется код «ABOWD…».
+            if (Matches(text, s.PaymentOrderKeyword) && Matches(text, s.ControlCodeKeyword))
+                return Wrap("Платёжное поручение", ExtractControlCode(text, s));
 
             if (Matches(text, s.RevocationKeyword))
                 return Wrap("Отзыв документа", ExtractIban(text, s));
