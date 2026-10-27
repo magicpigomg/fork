@@ -50,7 +50,7 @@ namespace MultiTool.Services
             {
                 if (Matches(text, s.SuspendedKeyword))
                 {
-                    int occurrence = EffectiveOccurrence(text, s, s.SuspendedOccurrence);
+                    int occurrence = EffectiveOccurrence(text, s, s.SuspendedOccurrence, false);
                     return Wrap("Заявление (приостановление)" + OccurrenceNote(occurrence, s.SuspendedOccurrence),
                         ExtractAfterMarker(text, s, occurrence, s.SuspendedSkip, s.SuspendedLength));
                 }
@@ -62,7 +62,7 @@ namespace MultiTool.Services
             // Проверяется последним, чтобы не менять поведение «Заявления».
             if (Matches(text, s.OrderKeyword))
             {
-                int occurrence = EffectiveOccurrence(text, s, s.OrderOccurrence);
+                int occurrence = EffectiveOccurrence(text, s, s.OrderOccurrence, true);
                 return Wrap("Распоряжение" + OccurrenceNote(occurrence, s.OrderOccurrence),
                     ExtractAfterMarker(text, s, occurrence, s.OrderSkip, s.OrderLength));
             }
@@ -74,12 +74,13 @@ namespace MultiTool.Services
         /// <summary>
         /// Какой по счёту № брать. Обычно — как в настройках, но если в тексте три и более «№» (например, «Завод №1»)
         /// и правило берёт второй №, то берётся третий (число — в настройке OccurrenceWhenThreeMarkers).
-        /// Исключение — распоряжение на бронирование денежных средств: там по-прежнему берётся второй №.
+        /// Исключение (только для «Распоряжения», allowBookingException) — распоряжение на бронирование денежных средств:
+        /// там по-прежнему берётся второй №. В «Заявлении» эта фраза может быть лишь названием приостанавливаемого документа.
         /// </summary>
-        private static int EffectiveOccurrence(string text, AppSettings s, int configured)
+        private static int EffectiveOccurrence(string text, AppSettings s, int configured, bool allowBookingException)
         {
             if (configured == 2 && s.OccurrenceWhenThreeMarkers > configured && CountMarkers(text) >= 3
-                && !Matches(text, s.BookingOrderKeyword))
+                && !(allowBookingException && Matches(text, s.BookingOrderKeyword)))
                 return s.OccurrenceWhenThreeMarkers;
             return configured;
         }
