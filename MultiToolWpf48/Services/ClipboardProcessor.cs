@@ -74,10 +74,12 @@ namespace MultiTool.Services
         /// <summary>
         /// Какой по счёту № брать. Обычно — как в настройках, но если в тексте три и более «№» (например, «Завод №1»)
         /// и правило берёт второй №, то берётся третий (число — в настройке OccurrenceWhenThreeMarkers).
+        /// Исключение — распоряжение на бронирование денежных средств: там по-прежнему берётся второй №.
         /// </summary>
         private static int EffectiveOccurrence(string text, AppSettings s, int configured)
         {
-            if (configured == 2 && s.OccurrenceWhenThreeMarkers > configured && CountMarkers(text) >= 3)
+            if (configured == 2 && s.OccurrenceWhenThreeMarkers > configured && CountMarkers(text) >= 3
+                && !Matches(text, s.BookingOrderKeyword))
                 return s.OccurrenceWhenThreeMarkers;
             return configured;
         }
