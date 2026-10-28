@@ -1,63 +1,39 @@
 [PCOMM SCRIPT HEADER]
 LANGUAGE=VBSCRIPT
-DESCRIPTION=Фильтр документов по выбранному сценарию
+DESCRIPTION=Фильтр по сценарию
 [PCOMM SCRIPT SOURCE]
 OPTION EXPLICIT
 autECLSession.SetConnectionByName(ThisSessionName)
 
-' ================== НАСТРОЙКИ ==================
-Const TIMEOUT_MS = 15000
-Const DATE_FMT   = "DDMMYY"     ' формат {DATE}: DDMMYY, DDMMYYYY, DD.MM.YYYY, YYYYMMDD ...
-
 ' ================== СЦЕНАРИИ ==================
-' Первый элемент - название в меню, дальше шаги.
-'
-' Поля:
-'   FIELD|Подпись|значение      записать значение в поле справа от подписи
-'   SET|строка|колонка|значение записать значение по координатам
-'   CLEAR|Подпись               очистить поле
-'   CLEARALL                    очистить все поля ввода на экране
-'   CURSOR|Подпись              поставить курсор в поле
-' Клавиши:
-'   ENTER  PGDN  PGUP  F1..F24  KEY|[код PCOMM]
-' Прочее:
-'   WAIT|текст                  ждать появления текста на экране
-'   PAUSE|мс                    пауза
-' Подстановки в значениях:
-'   {DATE} - сегодня, {DATE-1} - вчера, {DATE+3} - через 3 дня (формат DATE_FMT)
+' Первый элемент - название в меню, дальше шаги:
+'   TYPE|текст          напечатать текст с позиции курсора ({CLIP} - значение из буфера)
+'   ENTER               Enter
+'   KEY|[pf18]          любая клавиша PCOMM (Shift+F6 = [pf18])
+'   CURSOR|строка|кол   поставить курсор
 Dim SCENARIOS
 SCENARIOS = Array( _
     Array("0104", _
-        "WAIT|Вид опер", _
-        "CLEARALL", _
-        "FIELD|Вид опер|0104", _
-        "ENTER"), _
-    Array("0104 - отделение CK за сегодня", _
-        "WAIT|Вид опер", _
-        "CLEARALL", _
-        "FIELD|Вид опер|0104", _
-        "FIELD|Код отд|CK", _
-        "FIELD|Дата ввода|{DATE}", _
-        "ENTER"), _
-    Array("Мои документы за вчера", _
-        "WAIT|Вид опер", _
-        "CLEARALL", _
-        "FIELD|Исполнитель ввода|IVANOV", _
-        "FIELD|Дата ввода|{DATE-1}", _
-        "ENTER") _
+        "TYPE|YU3", _
+        "ENTER", _
+        "TYPE|0104", _
+        "ENTER", _
+        "KEY|[pf18]", _
+        "CURSOR|21|29", _
+        "TYPE|=={CLIP}") _
 )
 ' ===============================================
 
-Dim ps, oia, fieldsCache, cacheValid, lastErr
+Dim ps, oia
 Set ps  = autECLSession.autECLPS
 Set oia = autECLSession.autECLOIA
-cacheValid = False
 
 subMain
 
 Sub subMain()
-    Dim menu, i, choice, sc
+    Dim menu, i, choice, sc, p, clip, txt
 
+    ' --- меню ---
     menu = "Выберите сценарий:" & vbCrLf & vbCrLf
     For i = 0 To UBound(SCENARIOS)
         menu = menu & "  " & (i + 1) & " - " & SCENARIOS(i)(0) & vbCrLf
@@ -69,156 +45,38 @@ Sub subMain()
     If Not IsNumeric(choice) Then Exit Sub
     choice = CInt(choice) - 1
     If choice < 0 Or choice > UBound(SCENARIOS) Then Exit Sub
-
     sc = SCENARIOS(choice)
-    For i = 1 To UBound(sc)
-        lastErr = ""
-        If Not RunStep(sc(i)) Then
-            MsgBox "Сценарий «" & sc(0) & "» остановлен на шаге " & i & ":" & vbCrLf & _
-                   sc(i) & vbCrLf & vbCrLf & lastErr, vbExclamation, "Фильтр Equation"
+
+    ' --- буфер обмена (только если сценарий его использует) ---
+    clip = ""
+    If InStr(Join(sc, " "), "{CLIP}") > 0 Then
+        clip = GetClipboard()
+        clip = Trim(Replace(Replace(clip, vbCr, ""), vbLf, ""))
+        If clip = "" Then
+            MsgBox "Буфер обмена пуст. Скопируйте значение и повторите.", vbExclamation, "Фильтр Equation"
             Exit Sub
         End If
+    End If
+
+    ' --- шаги ---
+    For i = 1 To UBound(sc)
+        p = Split(sc(i) & "|||", "|")
+        Select Case UCase(Trim(p(0)))
+            Case "TYPE"
+                txt = Replace(p(1), "{CLIP}", clip)
+                ps.SendKeys Replace(Replace(txt, "[", "[["), "]", "]]")
+                ps.Wait 50
+            Case "ENTER"
+                If Not PressKey("[enter]") Then Exit Sub
+            Case "KEY"
+                If Not PressKey(p(1)) Then Exit Sub
+            Case "CURSOR"
+                ps.SetCursorPos CInt(p(1)), CInt(p(2))
+        End Select
     Next
 End Sub
 
-' ---------- Выполнение шага ----------
-Function RunStep(st)
-    Dim p, cmd, r, c, w
-    RunStep = True
-    p = Split(st & "||||", "|")
-    cmd = UCase(Trim(p(0)))
-
-    Select Case cmd
-        Case "FIELD"
-            If Not FieldByLabel(p(1), r, c, w) Then RunStep = False: Exit Function
-            PutText r, c, Subst(p(2)), w
-
-        Case "SET"
-            r = CInt(p(1)): c = CInt(p(2))
-            w = FieldRoom(r, c)
-            If w <= 0 Then lastErr = "В позиции " & r & "/" & c & " нет поля ввода": RunStep = False: Exit Function
-            PutText r, c, Subst(p(3)), w
-
-        Case "CLEAR"
-            If Not FieldByLabel(p(1), r, c, w) Then RunStep = False: Exit Function
-            PutText r, c, "", w
-
-        Case "CLEARALL"
-            ClearAll
-
-        Case "CURSOR"
-            If Not FieldByLabel(p(1), r, c, w) Then RunStep = False: Exit Function
-            ps.SetCursorPos r, c
-
-        Case "ENTER": RunStep = PressKey("[enter]")
-        Case "PGDN":  RunStep = PressKey("[pagedn]")
-        Case "PGUP":  RunStep = PressKey("[pageup]")
-        Case "KEY":   RunStep = PressKey(p(1))
-
-        Case "WAIT"
-            If Not ps.WaitForString(p(1), 0, 0, TIMEOUT_MS, True, False) Then
-                lastErr = "На экране нет текста «" & p(1) & "». Открыт не тот экран?"
-                RunStep = False
-            End If
-
-        Case "PAUSE"
-            ps.Wait CLng(p(1))
-
-        Case Else
-            If Left(cmd, 1) = "F" And IsNumeric(Mid(cmd, 2)) Then
-                RunStep = PressKey("[pf" & CInt(Mid(cmd, 2)) & "]")
-            Else
-                lastErr = "Неизвестная команда"
-                RunStep = False
-            End If
-    End Select
-End Function
-
-' ---------- Поиск поля по подписи ----------
-' Возвращает строку, колонку и длину первого поля ввода справа от подписи
-Function FieldByLabel(label, r, c, w)
-    Dim L, row, t, k, ch, nt, m(), pos, endCol, fields, i, s, fr, fc, fl, labelPos
-    FieldByLabel = False
-    L = Norm(label)
-    fields = GetFields()
-
-    For row = 1 To ps.NumRows
-        t = ps.GetText(row, 1, ps.NumCols)
-        ReDim m(ps.NumCols)
-        nt = ""
-        For k = 1 To Len(t)
-            ch = Mid(t, k, 1)
-            If ch <> " " And ch <> "." Then
-                nt = nt & LCase(ch)
-                m(Len(nt)) = k
-            End If
-        Next
-
-        pos = InStr(nt, L)
-        If pos > 0 Then
-            endCol = m(pos + Len(L) - 1)
-            labelPos = (row - 1) * ps.NumCols + endCol
-
-            ' сначала ищем поле на той же строке справа от подписи
-            For i = 0 To UBound(fields)
-                s = Split(fields(i), "|")
-                fr = CInt(s(0)): fc = CInt(s(1)): fl = CInt(s(2))
-                If fr = row And fc > endCol Then
-                    r = fr: c = fc: w = fl
-                    FieldByLabel = True: Exit Function
-                End If
-            Next
-            ' иначе - первое поле после подписи
-            For i = 0 To UBound(fields)
-                s = Split(fields(i), "|")
-                fr = CInt(s(0)): fc = CInt(s(1)): fl = CInt(s(2))
-                If (fr - 1) * ps.NumCols + fc > labelPos Then
-                    r = fr: c = fc: w = fl
-                    FieldByLabel = True: Exit Function
-                End If
-            Next
-            lastErr = "Подпись «" & label & "» найдена, но поля ввода после неё нет"
-            Exit Function
-        End If
-    Next
-    lastErr = "На экране не найдена подпись «" & label & "»"
-End Function
-
-Function Norm(s)
-    Norm = LCase(Replace(Replace(s, " ", ""), ".", ""))
-End Function
-
-' Сколько символов помещается от позиции до конца поля (0 - не поле ввода)
-Function FieldRoom(r, c)
-    Dim fields, i, s, st, pos
-    FieldRoom = 0
-    fields = GetFields()
-    pos = (r - 1) * ps.NumCols + c
-    For i = 0 To UBound(fields)
-        s = Split(fields(i), "|")
-        st = (CInt(s(0)) - 1) * ps.NumCols + CInt(s(1))
-        If pos >= st And pos <= st + CInt(s(2)) - 1 Then
-            FieldRoom = st + CInt(s(2)) - pos
-            Exit Function
-        End If
-    Next
-End Function
-
-Sub ClearAll()
-    Dim fields, i, s
-    fields = GetFields()
-    For i = 0 To UBound(fields)
-        s = Split(fields(i), "|")
-        PutText CInt(s(0)), CInt(s(1)), "", CInt(s(2))
-    Next
-End Sub
-
-' ---------- Запись и клавиши ----------
-' Текст дополняется пробелами до конца поля - старое значение стирается
-Sub PutText(r, c, s, w)
-    ps.SetText Left(s & Space(w), w), r, c
-End Sub
-
+' Нажать клавишу и дождаться ответа Equation
 Function PressKey(k)
     Dim before, t
     before = ps.GetText(1, 1, ps.NumRows * ps.NumCols)
@@ -228,68 +86,34 @@ Function PressKey(k)
         ps.Wait 50
         t = t + 50
     Loop
-    PressKey = oia.WaitForInputReady(TIMEOUT_MS)
-    If Not PressKey Then lastErr = "Таймаут после " & k
-    cacheValid = False                 ' экран сменился - список полей перечитать
+    PressKey = oia.WaitForInputReady(15000)
+    If Not PressKey Then MsgBox "Equation не ответил после " & k, vbExclamation, "Фильтр Equation"
 End Function
 
-' ---------- Подстановки ----------
-Function Subst(s)
-    Dim re, mt, n
-    Set re = New RegExp
-    re.Pattern = "\{DATE([+-]\d+)?\}"
-    re.IgnoreCase = True
-    Do While re.Test(s)
-        Set mt = re.Execute(s)(0)
-        n = 0
-        If mt.SubMatches(0) <> "" Then n = CInt(mt.SubMatches(0))
-        s = Left(s, mt.FirstIndex) & DateStr(DateAdd("d", n, Date)) & Mid(s, mt.FirstIndex + mt.Length + 1)
-    Loop
-    Subst = s
-End Function
-
-Function DateStr(d)
-    Dim s
-    s = DATE_FMT
-    s = Replace(s, "YYYY", Year(d))
-    s = Replace(s, "YY", Right(Year(d), 2))
-    s = Replace(s, "MM", Right("0" & Month(d), 2))
-    s = Replace(s, "DD", Right("0" & Day(d), 2))
-    DateStr = s
-End Function
-
-' ---------- Поля ввода экрана (с кешем) ----------
-Function GetFields()
-    If Not cacheValid Then
-        fieldsCache = InputFields()
-        cacheValid = True
-    End If
-    GetFields = fieldsCache
-End Function
-
-' Все поля ввода экрана: "строка|колонка|длина"
-Function InputFields()
-    Dim fl, i, f, arr(), n
-    InputFields = Array()
-    n = -1
+' Чтение буфера обмена
+Function GetClipboard()
+    Dim s, sh, fso, tmp, st
+    s = ""
     On Error Resume Next
-    Set fl = ps.autECLFieldList
-    fl.Refresh
-    If Err.Number <> 0 Then Err.Clear: Exit Function
-    ReDim arr(fl.Count)
-    For i = 1 To fl.Count
-        Set f = fl(i)
-        If Err.Number = 0 Then
-            If Not f.Protected Then
-                n = n + 1
-                arr(n) = f.StartRow & "|" & f.StartCol & "|" & f.Length
-            End If
-        End If
-        Err.Clear
-    Next
+    s = CreateObject("htmlfile").parentWindow.clipboardData.getData("Text")
+    If Err.Number <> 0 Then s = ""
+    If IsNull(s) Then s = ""
+    Err.Clear
     On Error GoTo 0
-    If n >= 0 Then
-        ReDim Preserve arr(n)
-        InputFields = arr
+
+    If s = "" Then
+        Set sh = CreateObject("WScript.Shell")
+        Set fso = CreateObject("Scripting.FileSystemObject")
+        tmp = fso.GetSpecialFolder(2) & "\eq_clip.txt"
+        sh.Run "powershell -NoProfile -WindowStyle Hidden -Command ""Get-Clipboard -Raw | Out-File -FilePath '" & tmp & "' -Encoding utf8""", 0, True
+        If fso.FileExists(tmp) Then
+            Set st = CreateObject("ADODB.Stream")
+            st.Type = 2: st.Charset = "utf-8": st.Open
+            st.LoadFromFile tmp
+            s = st.ReadText
+            st.Close
+            fso.DeleteFile tmp
+        End If
     End If
+    GetClipboard = s
 End Function
