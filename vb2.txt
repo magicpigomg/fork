@@ -17,16 +17,14 @@ ACTIONS = Array( _
     "Отзыв - недостаточно средств|ОТЗЫВ: НЕДОСТАТОЧНО СРЕДСТВ НА СЧЕТЕ ПЛАТЕЛЬЩИКА" _
 )
 
-Const TYPE_MODE    = "KEYS"   ' "KEYS" - печатать как с клавиатуры, "SETTEXT" - запись напрямую
-Const CLEAR_FIELD  = True     ' очищать поле перед вводом
-Const SAME_COLUMN  = True     ' переносить только в поля ниже, начинающиеся в той же колонке
-Const MAX_FIELDS   = 5        ' максимум полей для переноса (включая первое)
-Const CLEAR_REST   = False    ' True - очищать оставшиеся поля, если текст закончился раньше
+Const CLEAR_FIELD = True     ' стирать старый текст в поле (дополнять пробелами до конца поля)
+Const SAME_COLUMN = True     ' переносить только в поля ниже, начинающиеся в той же колонке
+Const MAX_FIELDS  = 5        ' максимум полей для переноса (включая первое)
+Const CLEAR_REST  = False    ' True - очищать оставшиеся поля, если текст закончился раньше
 ' ===============================================
 
-Dim ps, oia
-Set ps  = autECLSession.autECLPS
-Set oia = autECLSession.autECLOIA
+Dim ps
+Set ps = autECLSession.autECLPS
 
 subMain
 
@@ -58,7 +56,7 @@ Sub subMain()
     ' --- поля ввода на экране ---
     fields = InputFields()
     If UBound(fields) < 0 Then
-        ' список полей недоступен - просто печатаем с позиции курсора
+        ' список полей недоступен - печатаем с позиции курсора
         TypeAt row, col, text
     Else
         ' поле, в котором стоит курсор
@@ -76,7 +74,7 @@ Sub subMain()
             Exit Sub
         End If
 
-        ' список полей для заполнения: первое - от курсора, дальше - следующие поля
+        ' поля для заполнения: первое - от курсора, дальше - следующие поля
         ReDim tRow(MAX_FIELDS - 1): ReDim tCol(MAX_FIELDS - 1): ReDim tLen(MAX_FIELDS - 1)
         tRow(0) = row
         tCol(0) = col
@@ -94,14 +92,14 @@ Sub subMain()
             End If
         Next
 
-        ' раскладываем текст по полям с переносом по словам
+        ' раскладываем текст по полям: каждое поле заполняется до конца
         rest = text
         For i = 0 To n - 1
             If rest = "" Then
-                If CLEAR_REST Then TypeAt tRow(i), tCol(i), "" Else Exit For
+                If CLEAR_REST Then PutText tRow(i), tCol(i), "", tLen(i) Else Exit For
             Else
                 chunk = NextChunk(rest, tLen(i))
-                TypeAt tRow(i), tCol(i), chunk
+                PutText tRow(i), tCol(i), chunk, tLen(i)
             End If
         Next
     End If
@@ -109,40 +107,27 @@ Sub subMain()
     If UCase(Trim(p(2))) = "ENTER" Then ps.SendKeys "[enter]"
 End Sub
 
-' Отрезать от rest кусок длиной не больше w, по границе слова
+' Отрезать от rest ровно w символов (поле заполняется до конца, слова не учитываются)
 Function NextChunk(rest, w)
-    Dim cut
-    If Len(rest) <= w Then
-        NextChunk = rest
-        rest = ""
-        Exit Function
-    End If
-    cut = InStrRev(Left(rest, w + 1), " ")
-    If cut > 1 Then
-        NextChunk = RTrim(Left(rest, cut - 1))
-        rest = LTrim(Mid(rest, cut + 1))
-    Else
-        NextChunk = Left(rest, w)                ' слово длиннее поля - режем по символам
-        rest = Mid(rest, w + 1)
-    End If
+    NextChunk = Left(rest, w)
+    rest = Mid(rest, w + 1)
 End Function
 
-' Ввести текст в поле с позиции r, c
+' Быстрая запись в поле: текст дополняется пробелами до конца поля,
+' поэтому старое содержимое стирается без нажатий клавиш и без ожиданий
+Sub PutText(r, c, s, w)
+    If CLEAR_FIELD Then
+        ps.SetText Left(s & Space(w), w), r, c
+    ElseIf s <> "" Then
+        ps.SetText s, r, c
+    End If
+End Sub
+
+' Запасной вариант, если список полей недоступен
 Sub TypeAt(r, c, s)
     ps.SetCursorPos r, c
-    If TYPE_MODE = "KEYS" Then
-        If CLEAR_FIELD Then ps.SendKeys "[eraseeof]"
-        If s <> "" Then ps.SendKeys Replace(Replace(s, "[", "[["), "]", "]]")
-    Else
-        If CLEAR_FIELD Then
-            ps.SendKeys "[eraseeof]"
-            oia.WaitForInputReady 3000
-            ps.Wait 50
-        End If
-        If s <> "" Then ps.SetText s, r, c
-    End If
-    oia.WaitForInputReady 3000
-    If oia.InputInhibited <> 0 Then ps.SendKeys "[reset]"   ' снять блокировку, если поле не приняло символ
+    If CLEAR_FIELD Then ps.SendKeys "[eraseeof]"
+    If s <> "" Then ps.SendKeys Replace(Replace(s, "[", "[["), "]", "]]")
 End Sub
 
 ' Все поля ввода экрана: "строка|колонка|длина"
