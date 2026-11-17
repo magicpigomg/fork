@@ -6,7 +6,6 @@ using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.Win32;
@@ -64,21 +63,35 @@ namespace MultiTool.Views
         private void ChooseFolder(bool first)
         {
             string current = CreditRates.Folder;
-            string picked = null;
-            using (var dialog = new System.Windows.Forms.FolderBrowserDialog())
-            {
-                dialog.Description = (first ? "Первое открытие вкладки «Кредит». " : "") +
-                    "Выберите папку для курсов валют: в ней будут лежать rates_nbrb.json и rates_alfa.txt. " +
-                    "Если там уже есть такие файлы (например, от старой программы Credit), они подхватятся.";
-                dialog.ShowNewFolderButton = true;
-                if (Directory.Exists(current)) dialog.SelectedPath = current;
 
-                Window owner = Window.GetWindow(this);
-                System.Windows.Forms.DialogResult result = owner != null
-                    ? dialog.ShowDialog(new Win32Owner(owner))
-                    : dialog.ShowDialog();
-                if (result == System.Windows.Forms.DialogResult.OK && !string.IsNullOrWhiteSpace(dialog.SelectedPath))
-                    picked = dialog.SelectedPath;
+            // Подсказка видна и под окном выбора; окно — стандартное WPF-окно открытия файла: нужная папка открывается в нём
+            // и подтверждается кнопкой «Открыть» (так не нужна сборка System.Windows.Forms).
+            Show(RatesStatus, null, (first ? "Первое открытие вкладки «Кредит». " : "") +
+                "Выберите папку для курсов валют: откройте её в окне и нажмите «Открыть». В ней будут лежать rates_nbrb.json и rates_alfa.txt; " +
+                "если такие файлы там уже есть (например, от старой программы Credit), они подхватятся.");
+
+            var dialog = new OpenFileDialog
+            {
+                Title = "Папка для курсов валют: откройте её и нажмите «Открыть»",
+                CheckFileExists = false,
+                CheckPathExists = true,
+                ValidateNames = false,
+                AddExtension = false,
+                DereferenceLinks = true,
+                Filter = "Папки|*.без-файлов",
+                FileName = "Выбор папки"
+            };
+            if (Directory.Exists(current)) dialog.InitialDirectory = current;
+
+            Window owner = Window.GetWindow(this);
+            bool? ok = owner != null ? dialog.ShowDialog(owner) : dialog.ShowDialog();
+
+            string picked = null;
+            if (ok == true)
+            {
+                string name = dialog.FileName;
+                string chosen = Directory.Exists(name) ? name : Path.GetDirectoryName(name);
+                if (!string.IsNullOrWhiteSpace(chosen) && Directory.Exists(chosen)) picked = chosen;
             }
 
             if (picked == null)
@@ -106,13 +119,6 @@ namespace MultiTool.Views
             ShowFolder();
             ShowRates(CreditRates.Load());
             if (error != null) Show(RatesStatus, false, "Папка выбрана, но настройки не сохранились: " + error);
-        }
-
-        private sealed class Win32Owner : System.Windows.Forms.IWin32Window
-        {
-            private readonly IntPtr _handle;
-            public Win32Owner(Window window) { _handle = new WindowInteropHelper(window).Handle; }
-            public IntPtr Handle { get { return _handle; } }
         }
 
         private static string Format(double? value)
