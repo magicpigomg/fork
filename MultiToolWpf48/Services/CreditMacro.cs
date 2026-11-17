@@ -108,24 +108,42 @@ namespace MultiTool.Services
 
             string curs = CursText(c.CursNbrb);
 
-            // 80-я проводка
-            var m80 = Head("80", c.NumberDoc);
-            Repeat(m80, Tab, 3);
-            m80.Add(Q(c.AccountBen));
-            m80.Add(Tab);
-            m80.Add(Q(sum));
-            m80.Add(Tab);
-            m80.Add(Q(cursAlfa));
-            m80.Add(Tab);
-            m80.Add(Q(c.PayerAccount));
-            m80.AddRange(new[] { "[enter]", "[pf24]", "[enter]", Tab });
-            m80.Add(Q(c.Purpose + " " + c.PayerName));
-            m80.Add("[pf5]");
-            Repeat(m80, "[up]", 10);
-            m80.Add(Q(c.Queue));
-            m80.Add("[enter]");
-            m80.Add(Q(Bank));
-            m80.AddRange(new[] { "[pf12]", "[pf12]" });
+            // Первая проводка: обычно 80-я; при очереди 05 — 90-я (как в «Конвертации», курс банка берётся из документа).
+            bool queue05 = IsQueue05(c.Queue);
+            CreditMacroFile first;
+            string queueNote = "";
+            if (queue05)
+            {
+                decimal sumUnits;
+                if (!decimal.TryParse(sum, NumberStyles.None, CultureInfo.InvariantCulture, out sumUnits))
+                    throw new CreditException("Не удалось прочитать сумму: «" + sum + "»");
+                double sumValue = (double)(sumUnits / 100m);   // цифры суммы в документе идут без разделителя, последние две — копейки
+                double rate = ParseNumber(cursAlfa.Replace(",", "."), "курс банка из документа");
+                double summa = Math.Round(sumValue * rate, 2);
+                first = File("!90", Posting90(c, summa, sumValue));
+                queueNote = "; очередь 05 → !90, сумма " + F2(sumValue) + " × курс " + cursAlfa + " = " + F2(summa);
+            }
+            else
+            {
+                var m80 = Head("80", c.NumberDoc);
+                Repeat(m80, Tab, 3);
+                m80.Add(Q(c.AccountBen));
+                m80.Add(Tab);
+                m80.Add(Q(sum));
+                m80.Add(Tab);
+                m80.Add(Q(cursAlfa));
+                m80.Add(Tab);
+                m80.Add(Q(c.PayerAccount));
+                m80.AddRange(new[] { "[enter]", "[pf24]", "[enter]", Tab });
+                m80.Add(Q(c.Purpose + " " + c.PayerName));
+                m80.Add("[pf5]");
+                Repeat(m80, "[up]", 10);
+                m80.Add(Q(c.Queue));
+                m80.Add("[enter]");
+                m80.Add(Q(Bank));
+                m80.AddRange(new[] { "[pf12]", "[pf12]" });
+                first = File("!80", m80);
+            }
 
             // 70-я проводка
             var m70 = Head("70", c.NumberDoc);
@@ -143,8 +161,8 @@ namespace MultiTool.Services
             m70.Add(Q(Bank));
             m70.AddRange(new[] { "[pf12]", "[pf12]" });
 
-            return Ok("№" + c.NumberDoc + ", " + c.Currency + ", сумма " + sum + ", курс банка " + cursAlfa,
-                File("!80", m80), File("!70", m70));
+            return Ok("№" + c.NumberDoc + ", " + c.Currency + ", сумма " + sum + ", курс банка " + cursAlfa + queueNote,
+                first, File("!70", m70));
         }
 
         // ── Без курса: !90 и !70 ─────────────────────────────────────────────────────────────
@@ -228,22 +246,7 @@ namespace MultiTool.Services
             string cursNbrb = CursText(c.CursNbrb);
 
             // 90-я проводка
-            var m90 = Head("90", c.NumberDoc);
-            Repeat(m90, Tab, 3);
-            m90.Add(Q(c.PayerAccount));
-            m90.Add(Q(F2(summa)));
-            m90.Add(Tab);
-            m90.Add(Q(c.AccountBen));
-            m90.Add(Tab);
-            m90.Add(Q(F2(sum)));
-            m90.AddRange(new[] { "[enter]", "[pf24]", "[enter]", Tab });
-            m90.Add(Q(c.Purpose + " " + c.PayerName));
-            m90.Add("[pf5]");
-            Repeat(m90, "[up]", 13);
-            m90.Add(Q(c.Queue));
-            m90.AddRange(new[] { "[enter]", "[pf5]" });
-            m90.Add(Q(Bank));
-            m90.AddRange(new[] { "[pf12]", "[pf12]" });
+            List<string> m90 = Posting90(c, summa, sum);
 
             // 70-я проводка
             var m70 = Head("70", c.NumberDoc);
@@ -316,6 +319,37 @@ namespace MultiTool.Services
             c.Queue = queue.Substring(cut);
 
             return c;
+        }
+
+        /// <summary>
+        /// 90-я проводка с суммой в рублях (summa) и суммой в валюте (sum): курс банка берётся из документа.
+        /// Используется в «Конвертации» и в «С курсом» при очереди 05.
+        /// </summary>
+        private static List<string> Posting90(Common c, double summa, double sum)
+        {
+            var m90 = Head("90", c.NumberDoc);
+            Repeat(m90, Tab, 3);
+            m90.Add(Q(c.PayerAccount));
+            m90.Add(Q(F2(summa)));
+            m90.Add(Tab);
+            m90.Add(Q(c.AccountBen));
+            m90.Add(Tab);
+            m90.Add(Q(F2(sum)));
+            m90.AddRange(new[] { "[enter]", "[pf24]", "[enter]", Tab });
+            m90.Add(Q(c.Purpose + " " + c.PayerName));
+            m90.Add("[pf5]");
+            Repeat(m90, "[up]", 13);
+            m90.Add(Q(c.Queue));
+            m90.AddRange(new[] { "[enter]", "[pf5]" });
+            m90.Add(Q(Bank));
+            m90.AddRange(new[] { "[pf12]", "[pf12]" });
+            return m90;
+        }
+
+        /// <summary>Очередь платежа 05: значение «5» с любыми ведущими нулями («05», «5», «005»).</summary>
+        private static bool IsQueue05(string queue)
+        {
+            return queue != null && queue.TrimStart('0') == "5";
         }
 
         // ── Мелочи ───────────────────────────────────────────────────────────────────────────
