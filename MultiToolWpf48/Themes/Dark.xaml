@@ -24,8 +24,11 @@
     <SolidColorBrush x:Key="CardBrush" Color="{StaticResource CardColor}"/>
     <SolidColorBrush x:Key="CardHoverBrush" Color="{StaticResource CardHoverColor}"/>
     <SolidColorBrush x:Key="InputBrush" Color="{StaticResource InputColor}"/>
-    <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource BorderColor}"/>
-    <SolidColorBrush x:Key="BorderStrongBrush" Color="{StaticResource BorderStrongColor}"/>
+    <!-- Обводки у карточек, кнопок, полей, боковой панели и окна не рисуем (прозрачные); толщина осталась, вёрстка не меняется. -->
+    <SolidColorBrush x:Key="BorderBrush" Color="Transparent"/>
+    <SolidColorBrush x:Key="BorderStrongBrush" Color="Transparent"/>
+    <!-- Тонкая линия-разделитель строк в таблице сравнения (это не обводка элемента). -->
+    <SolidColorBrush x:Key="DividerBrush" Color="{StaticResource BorderColor}"/>
     <SolidColorBrush x:Key="TextBrush" Color="{StaticResource TextColor}"/>
     <SolidColorBrush x:Key="MutedBrush" Color="{StaticResource MutedColor}"/>
     <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}"/>
