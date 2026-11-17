@@ -195,7 +195,7 @@ namespace MultiTool.Views
             // линия-разделитель под строкой
             var line = new Border
             {
-                BorderBrush = (Brush)FindResource("BorderBrush"),
+                BorderBrush = (Brush)FindResource("DividerBrush"),
                 BorderThickness = new Thickness(0, 1, 0, 0)
             };
             Grid.SetRow(line, row);
