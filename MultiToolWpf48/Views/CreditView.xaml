@@ -1,0 +1,90 @@
+<UserControl x:Class="MultiTool.Views.CreditView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="0,0,6,28">
+
+            <!-- Курсы валют (бывшая button2) -->
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="Курсы валют" Style="{StaticResource SectionTitle}"/>
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,4,0,16"
+                               Text="Курсы НБ РБ берутся с api.nbrb.by, курсы банка — со страницы из настроек. Без свежих курсов макросы не создаются."/>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="110"/>
+                            <ColumnDefinition Width="110"/>
+                            <ColumnDefinition Width="110"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Text="USD" Style="{StaticResource FieldLabel}" Grid.Column="1" Margin="0,0,0,8"/>
+                        <TextBlock Text="EUR" Style="{StaticResource FieldLabel}" Grid.Column="2" Margin="0,0,0,8"/>
+                        <TextBlock Text="RUB" Style="{StaticResource FieldLabel}" Grid.Column="3" Margin="0,0,0,8"/>
+
+                        <TextBlock Text="НБ РБ" Style="{StaticResource FieldLabel}" Grid.Row="1" Margin="2,0,24,10"/>
+                        <TextBlock x:Name="NbrbUsd" Grid.Row="1" Grid.Column="1" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold" Margin="0,-1,0,10"/>
+                        <TextBlock x:Name="NbrbEur" Grid.Row="1" Grid.Column="2" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold" Margin="0,-1,0,10"/>
+                        <TextBlock x:Name="NbrbRub" Grid.Row="1" Grid.Column="3" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold" Margin="0,-1,0,10"/>
+                        <TextBlock x:Name="NbrbTime" Grid.Row="1" Grid.Column="4" Style="{StaticResource Muted}" Margin="0,0,0,10"/>
+
+                        <TextBlock Text="Банк" Style="{StaticResource FieldLabel}" Grid.Row="2" Margin="2,0,24,0"/>
+                        <TextBlock x:Name="AlfaUsd" Grid.Row="2" Grid.Column="1" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold" Margin="0,-1,0,0"/>
+                        <TextBlock x:Name="AlfaEur" Grid.Row="2" Grid.Column="2" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold" Margin="0,-1,0,0"/>
+                        <TextBlock x:Name="AlfaRub" Grid.Row="2" Grid.Column="3" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold" Margin="0,-1,0,0"/>
+                        <TextBlock x:Name="AlfaTime" Grid.Row="2" Grid.Column="4" Style="{StaticResource Muted}"/>
+                    </Grid>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,18,0,0">
+                        <Button x:Name="UpdateButton" Content="Обновить курсы" Style="{StaticResource PrimaryButton}" Click="OnUpdateRates"/>
+                        <Button Content="Папка с курсами" Style="{StaticResource GhostButton}" Margin="10,0,0,0" Click="OnOpenFolder"/>
+                        <TextBlock x:Name="RatesStatus" Style="{StaticResource Muted}" VerticalAlignment="Center"
+                                   Margin="14,0,0,0" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Макросы (бывшие button1, button3, button4) -->
+            <Border Style="{StaticResource Card}" Margin="0,16,0,0">
+                <StackPanel>
+                    <TextBlock Text="Макросы по платёжному поручению" Style="{StaticResource SectionTitle}"/>
+                    <TextBlock Style="{StaticResource Muted}" Margin="0,4,0,16"
+                               Text="Скопируйте платёжное поручение целиком и нажмите нужную кнопку: программа предложит сохранить макросы .mac."/>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="170"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <Button x:Name="WithRateButton" Content="С курсом" Style="{StaticResource PrimaryButton}" Click="OnWithRate" Margin="0,0,0,10"/>
+                        <TextBlock Grid.Column="1" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="16,0,0,10" TextWrapping="Wrap"
+                                   Text="!80 и !70 — курс банка берётся из документа (после последнего «:» в строке с суммой)."/>
+
+                        <Button x:Name="NoRateButton" Content="Без курса" Style="{StaticResource PrimaryButton}" Click="OnNoRate" Grid.Row="1" Margin="0,0,0,10"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="16,0,0,10" TextWrapping="Wrap"
+                                   Text="!90 и !70 — сумма пересчитывается по курсу банка из таблицы выше."/>
+
+                        <Button x:Name="ConversionButton" Content="Конвертация" Style="{StaticResource PrimaryButton}" Click="OnConversion" Grid.Row="2"/>
+                        <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="16,0,0,0" TextWrapping="Wrap"
+                                   Text="!90 и !70 — сумма и курс берутся из документа (девятое слово и последнее слово строки с суммой)."/>
+                    </Grid>
+
+                    <TextBlock x:Name="CreditStatus" Style="{StaticResource Muted}" Margin="0,16,0,0" TextWrapping="Wrap"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -32,6 +32,7 @@ namespace MultiTool
                 { "NavCompare", new PageInfo { Title = "Сравнение текстов", Subtitle = "Посимвольная проверка двух значений", Create = () => new CompareView() } },
                 { "NavTools", new PageInfo { Title = "Инструменты", Subtitle = "Очистка пробелов и разбор номера", Create = () => new ToolsView() } },
                 { "NavFiles", new PageInfo { Title = "Файлы", Subtitle = "Создание файлов приостановления и Accept", Create = () => new FilesView() } },
+                { "NavCredit", new PageInfo { Title = "Кредит", Subtitle = "Макросы !80, !90 и !70 по платёжному поручению из буфера обмена", Create = () => new CreditView() } },
                 { "NavSettings", new PageInfo { Title = "Настройки", Subtitle = "Все параметры хранятся в " + SettingsStore.Folder, Create = () => new SettingsView() } },
             };
 
