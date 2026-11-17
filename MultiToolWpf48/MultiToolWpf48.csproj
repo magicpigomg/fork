@@ -14,4 +14,9 @@
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- только для окна выбора папки (FolderBrowserDialog) -->
+    <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+
 </Project>

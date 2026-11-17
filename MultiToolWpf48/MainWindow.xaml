@@ -37,6 +37,8 @@
                                      GroupName="nav" Checked="OnNavChecked"/>
                         <RadioButton x:Name="NavFiles" Style="{StaticResource NavItem}" Tag="&#xE8A5;" Content="Файлы"
                                      GroupName="nav" Checked="OnNavChecked"/>
+                        <RadioButton x:Name="NavCredit" Style="{StaticResource NavItem}" Tag="&#xE825;" Content="Кредит"
+                                     GroupName="nav" Checked="OnNavChecked"/>
                     </StackPanel>
                 </DockPanel>
             </Border>

@@ -114,6 +114,16 @@ namespace MultiTool.Views
             files.Children.Add(Multiline("Шаблон файла с датой", nameof(AppSettings.DateFileTemplate), 70, mono: true));
             files.Children.Add(Multiline("Шаблон макроса приостановления", nameof(AppSettings.PriostanovlenieTemplate), 320, mono: true));
 
+            // ── Кредит ──────────────────────────────────────────────────────────────
+            var credit = AddCard("Кредит",
+                "Курсы для макросов !80 / !90 / !70 (вкладка «Кредит»). Файлы курсов rates_nbrb.json и rates_alfa.txt лежат в папке настроек.");
+            var creditRow = NewWrap();
+            creditRow.Children.Add(Text("Адрес страницы с курсами банка", nameof(AppSettings.CreditBankRatesUrl), 460));
+            credit.Children.Add(creditRow);
+            var creditFolder = NewWrap();
+            creditFolder.Children.Add(Text("Папка курсов (пусто — предложить выбрать при открытии вкладки «Кредит»)", nameof(AppSettings.CreditRatesFolder), 460));
+            credit.Children.Add(creditFolder);
+
             // ── Accept ──────────────────────────────────────────────────────────────
             var accept = AddCard("Accept",
                 "Документ берётся из буфера обмена. Номера строк считаются с 0, «пропустить» — сколько символов отбросить от начала строки; " +
