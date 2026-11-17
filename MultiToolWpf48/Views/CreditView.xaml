@@ -80,7 +80,7 @@
 
                         <Button x:Name="WithRateButton" Content="С курсом" Style="{StaticResource PrimaryButton}" Click="OnWithRate" Margin="0,0,0,10"/>
                         <TextBlock Grid.Column="1" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="16,0,0,10" TextWrapping="Wrap"
-                                   Text="!80 и !70 — курс банка берётся из документа (после последнего «:» в строке с суммой)."/>
+                                   Text="!80 и !70 — курс банка берётся из документа (после последнего «:» в строке с суммой). Если очередь платежа 05 — !90 и !70."/>
 
                         <Button x:Name="NoRateButton" Content="Без курса" Style="{StaticResource PrimaryButton}" Click="OnNoRate" Grid.Row="1" Margin="0,0,0,10"/>
                         <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="16,0,0,10" TextWrapping="Wrap"
