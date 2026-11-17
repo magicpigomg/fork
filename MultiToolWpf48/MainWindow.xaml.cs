@@ -35,8 +35,6 @@ namespace MultiTool
                 { "NavSettings", new PageInfo { Title = "Настройки", Subtitle = "Все параметры хранятся в " + SettingsStore.Folder, Create = () => new SettingsView() } },
             };
 
-            AppServices.HotkeysStateChanged += UpdateStatus;
-            UpdateStatus();
             Navigate("NavHotkeys");
 
             SourceInitialized += delegate { ApplyWindowBorder(); };
@@ -88,14 +86,6 @@ namespace MultiTool
             PageTitle.Text = page.Title;
             PageSubtitle.Text = page.Subtitle;
             Host.Content = view;
-        }
-
-        private void UpdateStatus()
-        {
-            bool on = AppServices.HotkeysActive;
-            StatusDot.Fill = (Brush)FindResource(on ? "SuccessBrush" : "MutedBrush");
-            StatusTitle.Text = on ? "Клавиши активны" : "Клавиши выключены";
-            StatusSub.Text = on ? "F1–F3, Shift+F1–F3" : "Включите на главной";
         }
 
         /// <summary>Цвет тонкой рамки окна под тему (Windows 11; на других системах вызов безвреден).</summary>
