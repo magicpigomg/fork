@@ -42,12 +42,21 @@
                         <TextBlock x:Name="AlfaTime" Grid.Row="2" Grid.Column="4" Style="{StaticResource Muted}"/>
                     </Grid>
 
-                    <StackPanel Orientation="Horizontal" Margin="0,18,0,0">
+                    <Grid Margin="0,16,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Папка курсов" Style="{StaticResource FieldLabel}" Margin="2,0,24,0"/>
+                        <TextBlock x:Name="FolderText" Grid.Column="1" TextTrimming="CharacterEllipsis" Margin="0,-1,0,0"/>
+                    </Grid>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
                         <Button x:Name="UpdateButton" Content="Обновить курсы" Style="{StaticResource PrimaryButton}" Click="OnUpdateRates"/>
-                        <Button Content="Папка с курсами" Style="{StaticResource GhostButton}" Margin="10,0,0,0" Click="OnOpenFolder"/>
-                        <TextBlock x:Name="RatesStatus" Style="{StaticResource Muted}" VerticalAlignment="Center"
-                                   Margin="14,0,0,0" TextWrapping="Wrap"/>
+                        <Button Content="Выбрать папку…" Style="{StaticResource GhostButton}" Margin="10,0,0,0" Click="OnChooseFolder"/>
+                        <Button Content="Открыть папку" Style="{StaticResource GhostButton}" Margin="10,0,0,0" Click="OnOpenFolder"/>
                     </StackPanel>
+                    <TextBlock x:Name="RatesStatus" Style="{StaticResource Muted}" Margin="0,12,0,0" TextWrapping="Wrap"/>
                 </StackPanel>
             </Border>
 

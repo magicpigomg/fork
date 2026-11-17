@@ -120,6 +120,9 @@ namespace MultiTool.Views
             var creditRow = NewWrap();
             creditRow.Children.Add(Text("Адрес страницы с курсами банка", nameof(AppSettings.CreditBankRatesUrl), 460));
             credit.Children.Add(creditRow);
+            var creditFolder = NewWrap();
+            creditFolder.Children.Add(Text("Папка курсов (пусто — предложить выбрать при открытии вкладки «Кредит»)", nameof(AppSettings.CreditRatesFolder), 460));
+            credit.Children.Add(creditFolder);
 
             // ── Accept ──────────────────────────────────────────────────────────────
             var accept = AddCard("Accept",

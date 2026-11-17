@@ -94,6 +94,8 @@ namespace MultiTool.Models
         // ── Кредит ──────────────────────────────────────────────────────────────
         // Страница с таблицей курсов банка (id «tblRatesH3»); курсы НБ РБ берутся с api.nbrb.by.
         public string CreditBankRatesUrl { get; set; } = "http://s270-projects:8071/";
+        // Папка с файлами курсов (rates_nbrb.json, rates_alfa.txt). Пусто — при первом открытии вкладки «Кредит» предлагается выбрать.
+        public string CreditRatesFolder { get; set; } = "";
 
         // ── Файлы приостановления ───────────────────────────────────────────────
         public string DatePath { get; set; } = DefaultFile("date.txt");

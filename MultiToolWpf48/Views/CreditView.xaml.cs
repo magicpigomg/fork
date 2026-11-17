@@ -6,7 +6,9 @@ using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using MultiTool.Models;
 using MultiTool.Services;
@@ -15,10 +17,23 @@ namespace MultiTool.Views
 {
     public partial class CreditView : UserControl
     {
+        private bool _askedFolder;
+
         public CreditView()
         {
             InitializeComponent();
-            Loaded += delegate { ShowRates(CreditRates.Load()); };
+            Loaded += delegate
+            {
+                ShowFolder();
+                ShowRates(CreditRates.Load());
+
+                // Первое открытие: папка для курсов ещё не выбрана — предлагаем выбрать (после отрисовки страницы).
+                if (!_askedFolder && string.IsNullOrWhiteSpace(AppSettings.Current.CreditRatesFolder))
+                {
+                    _askedFolder = true;
+                    Dispatcher.BeginInvoke(new Action(delegate { ChooseFolder(true); }), DispatcherPriority.ApplicationIdle);
+                }
+            };
         }
 
         // ── Курсы ────────────────────────────────────────────────────────────────────────────
@@ -33,6 +48,71 @@ namespace MultiTool.Views
             AlfaRub.Text = AlfaText(set, 2);
             NbrbTime.Text = Stamp(set.NbrbUpdated);
             AlfaTime.Text = Stamp(set.AlfaUpdated);
+        }
+
+        private void ShowFolder()
+        {
+            FolderText.Text = CreditRates.Folder;
+        }
+
+        private void OnChooseFolder(object sender, RoutedEventArgs e)
+        {
+            ChooseFolder(false);
+        }
+
+        /// <summary>Окно выбора папки для курсов. При первом открытии отказ оставляет папку настроек программы (и больше не спрашивает).</summary>
+        private void ChooseFolder(bool first)
+        {
+            string current = CreditRates.Folder;
+            string picked = null;
+            using (var dialog = new System.Windows.Forms.FolderBrowserDialog())
+            {
+                dialog.Description = (first ? "Первое открытие вкладки «Кредит». " : "") +
+                    "Выберите папку для курсов валют: в ней будут лежать rates_nbrb.json и rates_alfa.txt. " +
+                    "Если там уже есть такие файлы (например, от старой программы Credit), они подхватятся.";
+                dialog.ShowNewFolderButton = true;
+                if (Directory.Exists(current)) dialog.SelectedPath = current;
+
+                Window owner = Window.GetWindow(this);
+                System.Windows.Forms.DialogResult result = owner != null
+                    ? dialog.ShowDialog(new Win32Owner(owner))
+                    : dialog.ShowDialog();
+                if (result == System.Windows.Forms.DialogResult.OK && !string.IsNullOrWhiteSpace(dialog.SelectedPath))
+                    picked = dialog.SelectedPath;
+            }
+
+            if (picked == null)
+            {
+                if (!first) return;
+                Apply(SettingsStore.Folder);
+                Show(RatesStatus, null, "Папка не выбрана — курсы будут лежать в папке настроек. Сменить её можно кнопкой «Выбрать папку…».");
+                return;
+            }
+
+            Apply(picked);
+            CreditRateSet found = CreditRates.Load();
+            bool hasRates = found.NbrbUpdated.HasValue || found.AlfaUpdated.HasValue;
+            string message = hasRates
+                ? "Папка выбрана, найдены сохранённые курсы."
+                : "Папка выбрана. Курсов в ней пока нет — нажмите «Обновить курсы».";
+            Show(RatesStatus, true, message);
+            ActivityLog.Add("Кредит", "Папка курсов: " + picked, LogKind.Info);
+        }
+
+        private void Apply(string folder)
+        {
+            AppSettings.Current.CreditRatesFolder = folder;
+            string error = SettingsStore.Save(AppSettings.Current);
+            ShowFolder();
+            ShowRates(CreditRates.Load());
+            if (error != null) Show(RatesStatus, false, "Папка выбрана, но настройки не сохранились: " + error);
+        }
+
+        private sealed class Win32Owner : System.Windows.Forms.IWin32Window
+        {
+            private readonly IntPtr _handle;
+            public Win32Owner(Window window) { _handle = new WindowInteropHelper(window).Handle; }
+            public IntPtr Handle { get { return _handle; } }
         }
 
         private static string Format(double? value)
@@ -74,8 +154,9 @@ namespace MultiTool.Views
         {
             try
             {
-                Directory.CreateDirectory(SettingsStore.Folder);
-                Process.Start("explorer.exe", "\"" + SettingsStore.Folder + "\"");
+                string folder = CreditRates.Folder;
+                Directory.CreateDirectory(folder);
+                Process.Start("explorer.exe", "\"" + folder + "\"");
             }
             catch (Exception ex)
             {

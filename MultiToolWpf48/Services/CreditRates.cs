@@ -76,8 +76,21 @@ namespace MultiTool.Services
         private const int BankRateLength = 6;      // длина одного курса в тексте
         private static readonly int[] BankRateOffsets = { 6, 18, 30 };   // USD, EUR, RUB — смещения после пропуска
 
-        public static string NbrbPath { get { return Path.Combine(SettingsStore.Folder, "rates_nbrb.json"); } }
-        public static string AlfaPath { get { return Path.Combine(SettingsStore.Folder, "rates_alfa.txt"); } }
+        private const string NbrbFile = "rates_nbrb.json";
+        private const string AlfaFile = "rates_alfa.txt";
+
+        /// <summary>Папка с файлами курсов: из настроек («Кредит»), а пока она не выбрана — папка настроек программы.</summary>
+        public static string Folder
+        {
+            get
+            {
+                string chosen = AppSettings.Current != null ? AppSettings.Current.CreditRatesFolder : null;
+                return string.IsNullOrWhiteSpace(chosen) ? SettingsStore.Folder : chosen.Trim();
+            }
+        }
+
+        public static string NbrbPath { get { return Path.Combine(Folder, NbrbFile); } }
+        public static string AlfaPath { get { return Path.Combine(Folder, AlfaFile); } }
 
         /// <summary>Читает сохранённые курсы; отсутствующий или битый файл даёт пустой набор, а не исключение.</summary>
         public static CreditRateSet Load()
@@ -111,16 +124,16 @@ namespace MultiTool.Services
         public static Task<CreditRatesUpdate> UpdateAsync(AppSettings settings)
         {
             string bankUrl = settings.CreditBankRatesUrl;
+            string folder = Folder;
             return Task.Run(() =>
             {
                 var result = new CreditRatesUpdate();
-                Directory.CreateDirectory(SettingsStore.Folder);
                 ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072;   // TLS 1.2
 
                 try
                 {
                     string message;
-                    result.NbrbOk = UpdateNbrb(out message);
+                    result.NbrbOk = UpdateNbrb(folder, out message);
                     result.NbrbMessage = message;
                 }
                 catch (Exception ex) { result.NbrbMessage = "не удалось получить курсы НБ РБ: " + ex.Message; }
@@ -128,7 +141,7 @@ namespace MultiTool.Services
                 try
                 {
                     string message;
-                    result.AlfaOk = UpdateBank(bankUrl, out message);
+                    result.AlfaOk = UpdateBank(bankUrl, folder, out message);
                     result.AlfaMessage = message;
                 }
                 catch (Exception ex) { result.AlfaMessage = "не удалось получить курсы банка: " + ex.Message; }
@@ -139,8 +152,9 @@ namespace MultiTool.Services
 
         // ── НБ РБ ────────────────────────────────────────────────────────────────────────────
 
-        private static bool UpdateNbrb(out string message)
+        private static bool UpdateNbrb(string folder, out string message)
         {
+            Directory.CreateDirectory(folder);
             var serializer = new DataContractJsonSerializer(typeof(NbrbRate));
             var rates = new List<NbrbRate>();
             foreach (string url in NbrbUrls)
@@ -161,7 +175,7 @@ namespace MultiTool.Services
             using (var stream = new MemoryStream())
             {
                 new DataContractJsonSerializer(typeof(List<NbrbRate>)).WriteObject(stream, rates);
-                File.WriteAllBytes(NbrbPath, stream.ToArray());
+                File.WriteAllBytes(Path.Combine(folder, NbrbFile), stream.ToArray());
             }
             message = "курсы НБ РБ обновлены";
             return true;
@@ -169,7 +183,7 @@ namespace MultiTool.Services
 
         // ── Банк ─────────────────────────────────────────────────────────────────────────────
 
-        private static bool UpdateBank(string url, out string message)
+        private static bool UpdateBank(string url, string folder, out string message)
         {
             if (string.IsNullOrWhiteSpace(url))
             {
@@ -181,7 +195,8 @@ namespace MultiTool.Services
             string[] lines;
             if (!TryParseBankTable(html, out lines, out message)) return false;
 
-            File.WriteAllLines(AlfaPath, lines);
+            Directory.CreateDirectory(folder);
+            File.WriteAllLines(Path.Combine(folder, AlfaFile), lines);
             message = "курсы банка обновлены";
             return true;
         }
