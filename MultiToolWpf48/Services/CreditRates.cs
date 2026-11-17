@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Net;
-using System.Runtime.Serialization;
-using System.Runtime.Serialization.Json;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -13,14 +11,96 @@ using MultiTool.Models;
 namespace MultiTool.Services
 {
     /// <summary>Курс НБ РБ в том виде, как его отдаёт api.nbrb.by (parammode=2); файл rates_nbrb.json совместим со старой программой.</summary>
-    [DataContract]
     public sealed class NbrbRate
     {
-        [DataMember(Name = "Cur_ID")] public int Id { get; set; }
-        [DataMember(Name = "Cur_Name")] public string Name { get; set; }
-        [DataMember(Name = "Cur_Abbreviation")] public string Abbreviation { get; set; }
-        [DataMember(Name = "Cur_Scale")] public int Scale { get; set; }
-        [DataMember(Name = "Cur_OfficialRate")] public double OfficialRate { get; set; }
+        public int Id { get; set; }
+        public string Name { get; set; }
+        public string Abbreviation { get; set; }
+        public int Scale { get; set; }
+        public double OfficialRate { get; set; }
+    }
+
+    /// <summary>
+    /// Минимальный разбор и запись JSON курсов НБ РБ: плоские объекты с полями Cur_ID, Cur_Name, Cur_Abbreviation, Cur_Scale, Cur_OfficialRate.
+    /// Без внешних библиотек и без ссылок на дополнительные сборки (проект собирается с одними стандартными ссылками WPF).
+    /// </summary>
+    internal static class NbrbJson
+    {
+        private static readonly Regex ObjectRegex = new Regex("\\{[^{}]*\\}");
+        private static readonly Regex AbbreviationRegex = new Regex("\"Cur_Abbreviation\"\\s*:\\s*\"([^\"\\\\]*)\"");
+        private static readonly Regex NameRegex = new Regex("\"Cur_Name\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
+        private static readonly Regex RateRegex = new Regex("\"Cur_OfficialRate\"\\s*:\\s*(-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)");
+        private static readonly Regex IdRegex = new Regex("\"Cur_ID\"\\s*:\\s*(-?\\d+)");
+        private static readonly Regex ScaleRegex = new Regex("\"Cur_Scale\"\\s*:\\s*(-?\\d+)");
+
+        /// <summary>Один объект курса; null, если в нём нет кода валюты или курса.</summary>
+        public static NbrbRate ParseObject(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return null;
+            Match abbreviation = AbbreviationRegex.Match(json);
+            Match rate = RateRegex.Match(json);
+            if (!abbreviation.Success || !rate.Success) return null;
+
+            var result = new NbrbRate
+            {
+                Abbreviation = abbreviation.Groups[1].Value,
+                OfficialRate = double.Parse(rate.Groups[1].Value, CultureInfo.InvariantCulture)
+            };
+            Match name = NameRegex.Match(json);
+            if (name.Success) result.Name = Regex.Unescape(name.Groups[1].Value);
+            Match id = IdRegex.Match(json);
+            if (id.Success) result.Id = int.Parse(id.Groups[1].Value, CultureInfo.InvariantCulture);
+            Match scale = ScaleRegex.Match(json);
+            if (scale.Success) result.Scale = int.Parse(scale.Groups[1].Value, CultureInfo.InvariantCulture);
+            return result;
+        }
+
+        /// <summary>Список объектов (файл rates_nbrb.json); объекты без кода или курса пропускаются.</summary>
+        public static List<NbrbRate> ParseList(string json)
+        {
+            var list = new List<NbrbRate>();
+            if (string.IsNullOrEmpty(json)) return list;
+            foreach (Match m in ObjectRegex.Matches(json))
+            {
+                NbrbRate rate = ParseObject(m.Value);
+                if (rate != null) list.Add(rate);
+            }
+            return list;
+        }
+
+        /// <summary>Список в том же виде, как его записывала старая программа (Newtonsoft, Formatting.Indented).</summary>
+        public static string WriteList(List<NbrbRate> rates)
+        {
+            var sb = new StringBuilder();
+            sb.Append("[\r\n");
+            for (int i = 0; i < rates.Count; i++)
+            {
+                NbrbRate r = rates[i];
+                sb.Append("  {\r\n");
+                sb.Append("    \"Cur_ID\": ").Append(r.Id.ToString(CultureInfo.InvariantCulture)).Append(",\r\n");
+                sb.Append("    \"Cur_Name\": \"").Append(Escape(r.Name)).Append("\",\r\n");
+                sb.Append("    \"Cur_Abbreviation\": \"").Append(Escape(r.Abbreviation)).Append("\",\r\n");
+                sb.Append("    \"Cur_Scale\": ").Append(r.Scale.ToString(CultureInfo.InvariantCulture)).Append(",\r\n");
+                sb.Append("    \"Cur_OfficialRate\": ").Append(r.OfficialRate.ToString("R", CultureInfo.InvariantCulture)).Append("\r\n");
+                sb.Append(i < rates.Count - 1 ? "  },\r\n" : "  }\r\n");
+            }
+            sb.Append("]");
+            return sb.ToString();
+        }
+
+        private static string Escape(string value)
+        {
+            if (value == null) return "";
+            var sb = new StringBuilder();
+            foreach (char c in value)
+            {
+                if (c == '"') sb.Append("\\\"");
+                else if (c == '\\') sb.Append("\\\\");
+                else if (c < ' ') sb.Append("\\u").Append(((int)c).ToString("x4"));
+                else sb.Append(c);
+            }
+            return sb.ToString();
+        }
     }
 
     /// <summary>Сохранённые курсы: НБ РБ (rates_nbrb.json) и банка (rates_alfa.txt — три строки: USD, EUR, RUB).</summary>
@@ -100,9 +180,7 @@ namespace MultiTool.Services
             {
                 if (File.Exists(NbrbPath))
                 {
-                    var serializer = new DataContractJsonSerializer(typeof(List<NbrbRate>));
-                    using (var stream = new MemoryStream(File.ReadAllBytes(NbrbPath)))
-                        set.Nbrb = (List<NbrbRate>)serializer.ReadObject(stream) ?? new List<NbrbRate>();
+                    set.Nbrb = NbrbJson.ParseList(File.ReadAllText(NbrbPath, Encoding.UTF8));
                     set.NbrbUpdated = File.GetLastWriteTime(NbrbPath);
                 }
             }
@@ -155,28 +233,19 @@ namespace MultiTool.Services
         private static bool UpdateNbrb(string folder, out string message)
         {
             Directory.CreateDirectory(folder);
-            var serializer = new DataContractJsonSerializer(typeof(NbrbRate));
             var rates = new List<NbrbRate>();
             foreach (string url in NbrbUrls)
             {
-                string json = Download(url);
-                using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(json)))
+                NbrbRate rate = NbrbJson.ParseObject(Download(url));
+                if (rate == null || rate.OfficialRate <= 0)
                 {
-                    var rate = (NbrbRate)serializer.ReadObject(stream);
-                    if (rate == null || string.IsNullOrEmpty(rate.Abbreviation) || rate.OfficialRate <= 0)
-                    {
-                        message = "ответ НБ РБ без курса (" + url + ")";
-                        return false;
-                    }
-                    rates.Add(rate);
+                    message = "ответ НБ РБ без курса (" + url + ")";
+                    return false;
                 }
+                rates.Add(rate);
             }
 
-            using (var stream = new MemoryStream())
-            {
-                new DataContractJsonSerializer(typeof(List<NbrbRate>)).WriteObject(stream, rates);
-                File.WriteAllBytes(Path.Combine(folder, NbrbFile), stream.ToArray());
-            }
+            File.WriteAllText(Path.Combine(folder, NbrbFile), NbrbJson.WriteList(rates), new UTF8Encoding(false));
             message = "курсы НБ РБ обновлены";
             return true;
         }
