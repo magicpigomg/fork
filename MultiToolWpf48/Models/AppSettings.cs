@@ -68,6 +68,9 @@ namespace MultiTool.Models
         public int SuspendedSkip { get; set; } = 8;
         public int SuspendedLength { get; set; } = 13;
 
+        // Свои правила для заявлений (список в настройках, блок «Приостановления»). Проверяются раньше встроенных, срабатывает первое подходящее.
+        public List<StatementRule> StatementRules { get; set; } = new List<StatementRule>();
+
         // Только «Заявление»
         public int StatementOccurrence { get; set; } = 1;
         public int StatementSkip { get; set; } = 9;

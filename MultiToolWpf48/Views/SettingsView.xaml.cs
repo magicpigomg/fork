@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.Win32;
 using MultiTool.Models;
@@ -48,7 +50,7 @@ namespace MultiTool.Views
 
             // ── Правила буфера ──────────────────────────────────────────────────────
             var rules = AddCard("Правила разбора буфера (F1)",
-                "Тип документа определяется по ключевым словам в скопированном тексте. Проверка идёт сверху вниз: отзыв → заявление → распоряжение. " +
+                "Тип документа определяется по ключевым словам в скопированном тексте. Проверка идёт сверху вниз: платёжное поручение → отзыв → заявление → распоряжение. " +
                 "Регистр, лишние пробелы и «е/ё» не важны.");
             rules.Children.Add(Row(
                 Number("Символов после № (для всех №)", nameof(AppSettings.TakeAfterMarker)),
@@ -57,7 +59,9 @@ namespace MultiTool.Views
             rBooking.Children.Add(Text("Три №, но берётся второй, если в тексте есть фраза", nameof(AppSettings.BookingOrderKeyword), 560));
             rules.Children.Add(rBooking);
 
-            rules.Children.Add(Subtitle("Отзыв документа и заявление на отзыв — по номеру счёта (BY…)"));
+            // ── Отзывы ──────────────────────────────────────────────────────────
+            var revocations = AddBlock(rules, "rules-revocation", "Отзывы",
+                "Отзыв документа и заявление на отзыв — счёт плательщика (BY…)");
             var r1 = NewWrap();
             r1.Children.Add(Text("Ключевая фраза «Отзыв»", nameof(AppSettings.RevocationKeyword), 260));
             r1.Children.Add(Text("Ключевая фраза «Заявление на отзыв»", nameof(AppSettings.RevocationRequestKeyword), 330));
@@ -66,11 +70,14 @@ namespace MultiTool.Views
             r1.Children.Add(Number("Пропустить", nameof(AppSettings.IbanSkip)));
             r1.Children.Add(Number("Взять", nameof(AppSettings.IbanLength)));
             r1.Children.Add(Number("Весь счёт: символов", nameof(AppSettings.IbanFullLength)));
-            rules.Children.Add(r1);
-            rules.Children.Add(Switch("Заявление на отзыв: выделять весь счёт (с BY) — включено весь номер, выключено часть после ALFA",
+            revocations.Children.Add(r1);
+            revocations.Children.Add(Switch("Заявление на отзыв: выделять весь счёт (с BY) — включено весь номер, выключено часть после ALFA",
                 nameof(AppSettings.RevocationRequestWholeAccount)));
 
-            rules.Children.Add(Subtitle("Заявление с приостанавливаемым распоряжением"));
+            // ── Приостановления ─────────────────────────────────────────────────
+            var suspensions = AddBlock(rules, "rules-suspension", "Приостановления",
+                "Заявления: с приостанавливаемым распоряжением, обычные и свои правила");
+            suspensions.Children.Add(BlockTitle("Заявление с приостанавливаемым распоряжением"));
             var r2 = NewWrap();
             r2.Children.Add(Text("Ключевая фраза «Заявление»", nameof(AppSettings.StatementKeyword), 260));
             r2.Children.Add(Text("Доп. фраза", nameof(AppSettings.SuspendedKeyword), 330));
@@ -78,30 +85,62 @@ namespace MultiTool.Views
             r2.Children.Add(Number("Какой по счёту №", nameof(AppSettings.SuspendedOccurrence)));
             r2.Children.Add(Number("Пропустить", nameof(AppSettings.SuspendedSkip)));
             r2.Children.Add(Number("Взять", nameof(AppSettings.SuspendedLength)));
-            rules.Children.Add(r2);
+            suspensions.Children.Add(r2);
 
-            rules.Children.Add(Subtitle("Только заявление"));
+            suspensions.Children.Add(Subtitle("Только заявление"));
             var r3 = NewWrap();
             r3.Children.Add(Number("Какой по счёту №", nameof(AppSettings.StatementOccurrence)));
             r3.Children.Add(Number("Пропустить", nameof(AppSettings.StatementSkip)));
             r3.Children.Add(Number("Взять", nameof(AppSettings.StatementLength)));
-            rules.Children.Add(r3);
+            suspensions.Children.Add(r3);
 
-            rules.Children.Add(Subtitle("Распоряжение"));
+            suspensions.Children.Add(Subtitle("Свои правила для заявлений"));
+            suspensions.Children.Add(new TextBlock
+            {
+                Text = "Нужно распознать новый вид заявления — добавьте правило кнопкой «+». Правила проверяются сверху вниз раньше встроенных " +
+                       "(срабатывает первое подходящее) и только для текстов со словом «Заявление». Ключевая фраза обязательна; " +
+                       "доп. фразу заполняйте, если одной фразы мало: тогда в тексте должны быть обе.",
+                Style = (Style)FindResource("Muted"),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 12)
+            });
+            var ruleList = new StackPanel();
+            foreach (StatementRule rule in AppSettings.Current.StatementRules)
+                ruleList.Children.Add(BuildRuleCard(ruleList, rule));
+            suspensions.Children.Add(ruleList);
+            var addRule = new Button
+            {
+                Content = "+  Добавить правило",
+                Style = (Style)FindResource("GhostButton"),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Margin = new Thickness(0, 2, 0, 0)
+            };
+            addRule.Click += delegate
+            {
+                var rule = new StatementRule();
+                AppSettings.Current.StatementRules.Add(rule);
+                ruleList.Children.Add(BuildRuleCard(ruleList, rule));
+            };
+            suspensions.Children.Add(addRule);
+
+            // ── Распоряжения ────────────────────────────────────────────────────
+            var orders = AddBlock(rules, "rules-order", "Распоряжения", "Проверяется последним, чтобы не менять поведение заявлений");
             var r4 = NewWrap();
             r4.Children.Add(Text("Ключевая фраза", nameof(AppSettings.OrderKeyword), 260));
             r4.Children.Add(Number("Какой по счёту №", nameof(AppSettings.OrderOccurrence)));
             r4.Children.Add(Number("Пропустить", nameof(AppSettings.OrderSkip)));
             r4.Children.Add(Number("Взять", nameof(AppSettings.OrderLength)));
-            rules.Children.Add(r4);
+            orders.Children.Add(r4);
 
-            rules.Children.Add(Subtitle("Платежное поручение"));
+            // ── Платёжные поручения ─────────────────────────────────────────────
+            var payments = AddBlock(rules, "rules-payment", "Платёжные поручения",
+                "Платёжное поручение, прошедшее предварительный контроль, — код «ABOWD…» (проверяется первым)");
             var r5 = NewWrap();
             r5.Children.Add(Text("Ключевая фраза", nameof(AppSettings.PaymentOrderKeyword), 260));
             r5.Children.Add(Text("Признак", nameof(AppSettings.ControlCodeKeyword), 330));
             r5.Children.Add(Text("Префикс кода", nameof(AppSettings.ControlCodePrefix), 140));
             r5.Children.Add(Number("Общая длина кода", nameof(AppSettings.ControlCodeLength)));
-            rules.Children.Add(r5);
+            payments.Children.Add(r5);
 
             // ── Файлы ───────────────────────────────────────────────────────────────
             var files = AddCard("Файлы приостановления", "В шаблонах {Date} заменяется на сегодняшнюю дату в выбранном формате.");
@@ -242,6 +281,122 @@ namespace MultiTool.Views
             var card = new Border { Style = (Style)FindResource("Card"), Margin = new Thickness(0, 0, 0, 16), Child = inner };
             Stack.Children.Add(card);
             return inner;
+        }
+
+        // ── Сворачиваемые блоки ──────────────────────────────────────────────────────────────
+
+        // Открыт блок или свёрнут — помним, пока приложение работает (страница настроек пересоздаётся при сбросе).
+        private static readonly Dictionary<string, bool> BlockState = new Dictionary<string, bool>();
+
+        /// <summary>Блок внутри карточки: заголовок со стрелкой, по клику на заголовок (или стрелку) содержимое сворачивается и разворачивается.</summary>
+        private StackPanel AddBlock(Panel parent, string key, string title, string hint)
+        {
+            var content = new StackPanel { Margin = new Thickness(0, 16, 0, 0) };
+            var arrow = new TextBlock
+            {
+                FontFamily = (FontFamily)FindResource("IconFont"),
+                FontSize = 14,
+                Foreground = (Brush)FindResource("MutedBrush"),
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(12, 0, 0, 0)
+            };
+
+            var titles = new StackPanel();
+            titles.Children.Add(new TextBlock { Text = title, FontWeight = FontWeights.SemiBold, FontSize = 14 });
+            titles.Children.Add(new TextBlock
+            {
+                Text = hint,
+                Style = (Style)FindResource("Muted"),
+                Margin = new Thickness(0, 2, 0, 0),
+                TextWrapping = TextWrapping.Wrap
+            });
+
+            var header = new Grid { Background = Brushes.Transparent, Cursor = Cursors.Hand };
+            header.ColumnDefinitions.Add(new ColumnDefinition());
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            header.Children.Add(titles);
+            Grid.SetColumn(arrow, 1);
+            header.Children.Add(arrow);
+
+            bool expanded;
+            BlockState.TryGetValue(key, out expanded);
+            Action apply = delegate
+            {
+                content.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
+                arrow.Text = expanded ? "\uE70E" : "\uE70D";   // стрелка вверх — блок открыт, вниз — свёрнут
+            };
+            header.MouseLeftButtonUp += delegate
+            {
+                expanded = !expanded;
+                BlockState[key] = expanded;
+                apply();
+            };
+            apply();
+
+            var inner = new StackPanel();
+            inner.Children.Add(header);
+            inner.Children.Add(content);
+            parent.Children.Add(new Border
+            {
+                Background = (Brush)FindResource("CardHoverBrush"),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(16, 14, 16, 14),
+                Margin = new Thickness(0, 0, 0, 12),
+                Child = inner
+            });
+            return content;
+        }
+
+        /// <summary>Первый подзаголовок внутри блока (без большого отступа сверху).</summary>
+        private TextBlock BlockTitle(string text)
+        {
+            return new TextBlock { Text = text, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 10) };
+        }
+
+        // ── Редактор своих правил заявлений ──────────────────────────────────────────────────
+
+        /// <summary>Карточка одного правила; поля привязаны к самому правилу (DataContext), «Удалить» убирает его из списка и из настроек.</summary>
+        private FrameworkElement BuildRuleCard(Panel list, StatementRule rule)
+        {
+            var inner = new StackPanel { DataContext = rule };
+
+            var top = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
+            var remove = new Button { Content = "Удалить", Style = (Style)FindResource("DangerButton"), Padding = new Thickness(12, 6, 12, 6) };
+            DockPanel.SetDock(remove, Dock.Right);
+            top.Children.Add(remove);
+            top.Children.Add(Switch("Правило включено", nameof(StatementRule.Enabled)));
+            inner.Children.Add(top);
+
+            var fields = NewWrap();
+            fields.Children.Add(Text("Название (для журнала, необязательно)", nameof(StatementRule.Name), 260));
+            fields.Children.Add(Text("Ключевая фраза", nameof(StatementRule.Keyword), 330));
+            fields.Children.Add(Text("Доп. фраза (если нужна)", nameof(StatementRule.AltKeyword), 330));
+            fields.Children.Add(Number("Какой по счёту №", nameof(StatementRule.Occurrence)));
+            fields.Children.Add(Number("Пропустить", nameof(StatementRule.Skip)));
+            fields.Children.Add(Number("Взять", nameof(StatementRule.Length)));
+            inner.Children.Add(fields);
+            inner.Children.Add(Switch("Три №: брать по счёту из общих настроек (если № три и больше, а правило берёт второй)",
+                nameof(StatementRule.ThreeMarkersRule)));
+
+            var card = new Border
+            {
+                Background = (Brush)FindResource("CardBrush"),   // темнее блока, светлее полей ввода — поля видны
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(14, 12, 14, 0),
+                Margin = new Thickness(0, 0, 0, 10),
+                Child = inner
+            };
+
+            remove.Click += delegate
+            {
+                string name = string.IsNullOrWhiteSpace(rule.Name) ? rule.Keyword : rule.Name;
+                var answer = MessageBox.Show("Удалить правило" + (string.IsNullOrWhiteSpace(name) ? "" : " «" + name.Trim() + "»") + "?", "MultiTool",
+                    MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if (answer != MessageBoxResult.Yes) return;
+                AppSettings.Current.StatementRules.Remove(rule);
+                list.Children.Remove(card);
+            };
+            return card;
         }
 
         private static WrapPanel NewWrap()
