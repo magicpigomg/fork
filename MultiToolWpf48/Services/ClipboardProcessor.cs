@@ -48,6 +48,19 @@ namespace MultiTool.Services
 
             if (Matches(text, s.StatementKeyword))
             {
+                // Свои правила (настройки → «Приостановления»): первое подходящее; встроенные проверяются, только если ни одно не подошло.
+                StatementRule custom = FindStatementRule(text, s);
+                if (custom != null)
+                {
+                    int customOccurrence = custom.ThreeMarkersRule
+                        ? EffectiveOccurrence(text, s, custom.Occurrence, false)
+                        : custom.Occurrence;
+                    string label = string.IsNullOrWhiteSpace(custom.Name) ? custom.Keyword : custom.Name;
+                    string title = "Заявление: " + Regex.Replace(label.Trim(), "\\s+", " ");
+                    return Wrap(title + OccurrenceNote(customOccurrence, custom.Occurrence),
+                        ExtractAfterMarker(text, s, customOccurrence, custom.Skip, custom.Length));
+                }
+
                 if (Matches(text, s.SuspendedKeyword) || Matches(text, s.SuspendedAltKeyword))
                 {
                     int occurrence = EffectiveOccurrence(text, s, s.SuspendedOccurrence, false);
@@ -83,6 +96,20 @@ namespace MultiTool.Services
                 && !(allowBookingException && Matches(text, s.BookingOrderKeyword)))
                 return s.OccurrenceWhenThreeMarkers;
             return configured;
+        }
+
+        /// <summary>Первое включённое своё правило, у которого в тексте есть ключевая фраза (и доп. фраза, если она задана).</summary>
+        private static StatementRule FindStatementRule(string text, AppSettings s)
+        {
+            if (s.StatementRules == null) return null;
+            foreach (StatementRule rule in s.StatementRules)
+            {
+                if (rule == null || !rule.Enabled) continue;
+                if (!Matches(text, rule.Keyword)) continue;
+                if (!string.IsNullOrWhiteSpace(rule.AltKeyword) && !Matches(text, rule.AltKeyword)) continue;
+                return rule;
+            }
+            return null;
         }
 
         private static int CountMarkers(string text)
