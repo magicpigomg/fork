@@ -9,11 +9,12 @@
                 <StackPanel>
                     <TextBlock Text="Курсы валют" Style="{StaticResource SectionTitle}"/>
                     <TextBlock Style="{StaticResource Muted}" Margin="0,4,0,16"
-                               Text="Курсы НБ РБ берутся с api.nbrb.by, курсы банка — со страницы из настроек. Без свежих курсов макросы не создаются."/>
+                               Text="Курсы НБ РБ берутся с api.nbrb.by, курсы банка — со страницы из настроек. Без свежих курсов макросы не создаются. Курсы RUB показаны за 100, CNY — за 10."/>
 
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="110"/>
                             <ColumnDefinition Width="110"/>
                             <ColumnDefinition Width="110"/>
                             <ColumnDefinition Width="110"/>
@@ -28,18 +29,21 @@
                         <TextBlock Text="USD" Style="{StaticResource FieldLabel}" Grid.Column="1" Margin="0,0,0,8"/>
                         <TextBlock Text="EUR" Style="{StaticResource FieldLabel}" Grid.Column="2" Margin="0,0,0,8"/>
                         <TextBlock Text="RUB" Style="{StaticResource FieldLabel}" Grid.Column="3" Margin="0,0,0,8"/>
+                        <TextBlock Text="CNY" Style="{StaticResource FieldLabel}" Grid.Column="4" Margin="0,0,0,8"/>
 
                         <TextBlock Text="НБ РБ" Style="{StaticResource FieldLabel}" Grid.Row="1" Margin="2,0,24,10"/>
                         <TextBlock x:Name="NbrbUsd" Grid.Row="1" Grid.Column="1" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold" Margin="0,-1,0,10"/>
                         <TextBlock x:Name="NbrbEur" Grid.Row="1" Grid.Column="2" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold" Margin="0,-1,0,10"/>
                         <TextBlock x:Name="NbrbRub" Grid.Row="1" Grid.Column="3" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold" Margin="0,-1,0,10"/>
-                        <TextBlock x:Name="NbrbTime" Grid.Row="1" Grid.Column="4" Style="{StaticResource Muted}" Margin="0,0,0,10"/>
+                        <TextBlock x:Name="NbrbCny" Grid.Row="1" Grid.Column="4" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold" Margin="0,-1,0,10"/>
+                        <TextBlock x:Name="NbrbTime" Grid.Row="1" Grid.Column="5" Style="{StaticResource Muted}" Margin="0,0,0,10"/>
 
                         <TextBlock Text="Банк" Style="{StaticResource FieldLabel}" Grid.Row="2" Margin="2,0,24,0"/>
                         <TextBlock x:Name="AlfaUsd" Grid.Row="2" Grid.Column="1" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold" Margin="0,-1,0,0"/>
                         <TextBlock x:Name="AlfaEur" Grid.Row="2" Grid.Column="2" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold" Margin="0,-1,0,0"/>
                         <TextBlock x:Name="AlfaRub" Grid.Row="2" Grid.Column="3" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold" Margin="0,-1,0,0"/>
-                        <TextBlock x:Name="AlfaTime" Grid.Row="2" Grid.Column="4" Style="{StaticResource Muted}"/>
+                        <TextBlock x:Name="AlfaCny" Grid.Row="2" Grid.Column="4" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold" Margin="0,-1,0,0"/>
+                        <TextBlock x:Name="AlfaTime" Grid.Row="2" Grid.Column="5" Style="{StaticResource Muted}"/>
                     </Grid>
 
                     <Grid Margin="0,16,0,0">
@@ -65,7 +69,7 @@
                 <StackPanel>
                     <TextBlock Text="Макросы по платёжному поручению" Style="{StaticResource SectionTitle}"/>
                     <TextBlock Style="{StaticResource Muted}" Margin="0,4,0,16"
-                               Text="Скопируйте платёжное поручение целиком и нажмите нужную кнопку: программа предложит сохранить макросы .mac."/>
+                               Text="Скопируйте платёжное поручение целиком и нажмите нужную кнопку: программа предложит сохранить макросы .mac. Юань (CNY): курс за 10 приводится к одному юаню; работает в «С курсом» и «Без курса»."/>
 
                     <Grid>
                         <Grid.ColumnDefinitions>

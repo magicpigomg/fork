@@ -51,6 +51,10 @@ namespace MultiTool.Services
         private const string AccountUsd = "3819823389840";
         private const string AccountEur = "3819823380978";
         private const string AccountRub = "3819823389810";
+        private const string AccountCny = "3819823346002";
+
+        /// <summary>Курс юаня указан за 10 юаней; в макросы и расчёты он идёт за один юань (делится на 10).</summary>
+        private const double CnyScale = 10;
 
         private sealed class CreditException : Exception
         {
@@ -105,6 +109,15 @@ namespace MultiTool.Services
             string cursAlfa = Regex.Replace(c.AmountAndCurrency.Substring(colon), "[^0-9.,]", "");
             if (cursAlfa.EndsWith(".")) cursAlfa = cursAlfa.Substring(0, cursAlfa.Length - 1);
             if (cursAlfa.Length == 0) throw new CreditException("После последнего «:» в строке с суммой нет курса банка");
+
+            // Юань: курс в документе указан за 10 юаней — приводим к одному юаню (делим на 10).
+            string cnyNote = "";
+            if (c.Currency == "CNY")
+            {
+                double perTen = ParseNumber(cursAlfa.Replace(",", "."), "курс банка из документа");
+                cursAlfa = PerUnitText(perTen / CnyScale);
+                cnyNote = "; юань: курс из документа за 10 (" + PerUnitText(perTen) + ") приведён к 1";
+            }
 
             string curs = CursText(c.CursNbrb);
 
@@ -161,7 +174,7 @@ namespace MultiTool.Services
             m70.Add(Q(Bank));
             m70.AddRange(new[] { "[pf12]", "[pf12]" });
 
-            return Ok("№" + c.NumberDoc + ", " + c.Currency + ", сумма " + sum + ", курс банка " + cursAlfa + queueNote,
+            return Ok("№" + c.NumberDoc + ", " + c.Currency + ", сумма " + sum + ", курс банка " + cursAlfa + cnyNote + queueNote,
                 first, File("!70", m70));
         }
 
@@ -176,15 +189,25 @@ namespace MultiTool.Services
             string sum = Regex.Replace(c.AmountAndCurrency.Substring(0, 40), "[^0-9.]", "");
             double sumNumber = ParseNumber(sum, "сумму платежа");
 
-            int alfaIndex = c.Currency == "USD" ? 0 : (c.Currency == "EUR" ? 1 : 2);
+            int alfaIndex = c.Currency == "USD" ? 0 : (c.Currency == "EUR" ? 1 : (c.Currency == "CNY" ? 3 : 2));
             string alfaText = rates.AlfaLine(alfaIndex);
             if (string.IsNullOrWhiteSpace(alfaText))
                 throw new CreditException("Нет курса банка для " + c.Currency + ": нажмите «Обновить курсы» (или заполните rates_alfa.txt)");
             double alfa = ParseNumber(alfaText.Trim(), "курс банка");
 
+            if (c.Currency == "CNY")
+            {
+                // Курс юаня банка (за 10 юаней) берётся из колонки страницы или вписывается руками в rates_alfa.txt — сверяем его
+                // с курсом НБ РБ, чтобы чужое число не прошло за курс.
+                double ratio = alfa / CnyScale / c.CursNbrb;
+                if (ratio < 0.7 || ratio > 1.3)
+                    throw new CreditException("Курс банка для CNY (" + alfaText.Trim() + " за 10) сильно отличается от курса НБ РБ (" +
+                        PerUnitText(c.CursNbrb * CnyScale) + " за 10): проверьте 4-ю строку rates_alfa.txt");
+            }
+
             double summaValue = c.Currency == "RUB"
                 ? Math.Round(alfa / 100 * sumNumber, 2)
-                : Math.Round(alfa * sumNumber, 2);
+                : (c.Currency == "CNY" ? Math.Round(alfa / CnyScale * sumNumber, 2) : Math.Round(alfa * sumNumber, 2));
             string summa = F2(summaValue);
             string curs = CursText(c.CursNbrb);
 
@@ -222,7 +245,8 @@ namespace MultiTool.Services
             m70.Add(Q(Bank));
             m70.AddRange(new[] { "[pf12]", "[pf12]" });
 
-            return Ok("№" + c.NumberDoc + ", " + c.Currency + ", сумма " + sum + " → " + summa + " по курсу банка " + alfaText.Trim(),
+            return Ok("№" + c.NumberDoc + ", " + c.Currency + ", сумма " + sum + " → " + summa + " по курсу банка " + alfaText.Trim() +
+                (c.Currency == "CNY" ? " за 10" : ""),
                 File("!90", m90), File("!70", m70));
         }
 
@@ -231,6 +255,8 @@ namespace MultiTool.Services
         private static CreditBuildResult BuildConversion(List<string> list, CreditRateSet rates)
         {
             Common c = ReadCommon(list, rates, "[^0-9A-Z]", false);
+            if (c.Currency == "CNY")
+                throw new CreditException("Юань в «Конвертации» не поддерживается — используйте «С курсом» или «Без курса»");
 
             string amount = c.AmountAndCurrency;
             if (amount.EndsWith(".")) amount = amount.Substring(0, amount.Length - 1);   // точка в конце курса
@@ -287,13 +313,18 @@ namespace MultiTool.Services
             c.AmountAndCurrency = Line(list, 2);
             if (c.AmountAndCurrency.Contains("USD")) { c.Currency = "USD"; c.AccountBen = AccountUsd; }
             else if (c.AmountAndCurrency.Contains("EUR")) { c.Currency = "EUR"; c.AccountBen = AccountEur; }
+            else if (c.AmountAndCurrency.Contains("CNY")) { c.Currency = "CNY"; c.AccountBen = AccountCny; }
             else { c.Currency = "RUB"; c.AccountBen = AccountRub; }
 
             double? nbrb = rates.NbrbRate(c.Currency);
             if (nbrb == null)
                 throw new CreditException("Нет курса НБ РБ для " + c.Currency + ": нажмите «Обновить курсы»");
-            // Для российского рубля в сценарии «без курса» курс НБ РБ (за 100 руб.) приводится к одному рублю.
-            c.CursNbrb = c.Currency == "RUB" && rubNbrbPerUnit ? nbrb.Value / 100 : nbrb.Value;
+            // Для российского рубля в сценарии «без курса» курс НБ РБ (за 100 руб.) приводится к одному рублю;
+            // курс юаня НБ РБ даёт за 10 юаней — приводится к одному юаню.
+            double nbrbValue = nbrb.Value;
+            if (c.Currency == "RUB" && rubNbrbPerUnit) nbrbValue /= 100;
+            else if (c.Currency == "CNY") nbrbValue /= CnyScale;
+            c.CursNbrb = nbrbValue;
 
             // Счёт плательщика: без подписи «Счёт №» и без пробелов.
             c.PayerAccount = Regex.Replace(Line(list, 7), "\tСч[её]т\\s?[^\\t\\s]?\t", "").Replace(" ", "");
@@ -380,6 +411,12 @@ namespace MultiTool.Services
         private static string F2(double value)
         {
             return value.ToString("F2", CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>Курс без хвоста нулей и с точкой («0.31234»).</summary>
+        private static string PerUnitText(double value)
+        {
+            return value.ToString("0.########", CultureInfo.InvariantCulture);
         }
 
         /// <summary>Курс НБ РБ в макрос: как double.ToString() с точкой.</summary>

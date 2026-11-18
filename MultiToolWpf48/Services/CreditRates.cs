@@ -148,13 +148,15 @@ namespace MultiTool.Services
         {
             "https://api.nbrb.by/exrates/rates/USD?parammode=2",
             "https://api.nbrb.by/exrates/rates/EUR?parammode=2",
-            "https://api.nbrb.by/exrates/rates/RUB?parammode=2"
+            "https://api.nbrb.by/exrates/rates/RUB?parammode=2",
+            "https://api.nbrb.by/exrates/rates/CNY?parammode=2"
         };
 
         private const string BankTableId = "tblRatesH3";
         private const int BankTextSkip = 97;       // сколько символов текста таблицы отбрасывается до курсов
         private const int BankRateLength = 6;      // длина одного курса в тексте
         private static readonly int[] BankRateOffsets = { 6, 18, 30 };   // USD, EUR, RUB — смещения после пропуска
+        private const int BankCnyOffset = 42;      // юань (курс за 10) — следующая колонка; необязательна, на странице её может не быть
 
         private const string NbrbFile = "rates_nbrb.json";
         private const string AlfaFile = "rates_alfa.txt";
@@ -264,15 +266,38 @@ namespace MultiTool.Services
             string[] lines;
             if (!TryParseBankTable(html, out lines, out message)) return false;
 
+            string path = Path.Combine(folder, AlfaFile);
+            string note = "";
+            if (lines.Length < 4)
+            {
+                // Юаня на странице нет: сохраняем курс, вписанный руками (4-я строка), чтобы обновление его не стирало.
+                string manual = null;
+                try
+                {
+                    string[] old = File.Exists(path) ? File.ReadAllLines(path) : new string[0];
+                    if (old.Length > 3 && !string.IsNullOrWhiteSpace(old[3])) manual = old[3].Trim();
+                }
+                catch (Exception) { }
+
+                if (manual != null)
+                {
+                    Array.Resize(ref lines, 4);
+                    lines[3] = manual;
+                    note = " (юань — прежнее значение 4-й строки rates_alfa.txt)";
+                }
+                else note = " (юань на странице не найден — впишите курс за 10 юаней 4-й строкой в rates_alfa.txt)";
+            }
+
             Directory.CreateDirectory(folder);
-            File.WriteAllLines(Path.Combine(folder, AlfaFile), lines);
-            message = "курсы банка обновлены";
+            File.WriteAllLines(path, lines);
+            message = "курсы банка обновлены" + note;
             return true;
         }
 
         /// <summary>
         /// Текст таблицы с id «tblRatesH3» (без тегов) → три курса фиксированной длины: сначала отбрасываются первые 97 символов,
         /// затем берутся по 6 символов со смещений 6, 18 и 30 (USD, EUR, RUB) — так же, как в исходной программе.
+        /// Юань (курс за 10) читается необязательно со смещения 42: если там не курс, строк остаётся три.
         /// </summary>
         public static bool TryParseBankTable(string html, out string[] lines, out string error)
         {
@@ -304,6 +329,18 @@ namespace MultiTool.Services
                     return false;
                 }
                 parsed[i] = value.Replace(',', '.');
+            }
+
+            // Юань: необязательная четвёртая строка.
+            if (table.Length >= BankCnyOffset + BankRateLength)
+            {
+                string cny = table.Substring(BankCnyOffset, BankRateLength);
+                double cnyNumber;
+                if (double.TryParse(cny.Replace(',', '.'), NumberStyles.Float, CultureInfo.InvariantCulture, out cnyNumber) && cnyNumber > 0)
+                {
+                    Array.Resize(ref parsed, 4);
+                    parsed[3] = cny.Replace(',', '.');
+                }
             }
 
             lines = parsed;
