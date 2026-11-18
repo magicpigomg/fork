@@ -42,9 +42,11 @@ namespace MultiTool.Views
             NbrbUsd.Text = Format(set.NbrbRate("USD"));
             NbrbEur.Text = Format(set.NbrbRate("EUR"));
             NbrbRub.Text = Format(set.NbrbRate("RUB"));
+            NbrbCny.Text = Format(set.NbrbRate("CNY"));
             AlfaUsd.Text = AlfaText(set, 0);
             AlfaEur.Text = AlfaText(set, 1);
             AlfaRub.Text = AlfaText(set, 2);
+            AlfaCny.Text = AlfaText(set, 3);
             NbrbTime.Text = Stamp(set.NbrbUpdated);
             AlfaTime.Text = Stamp(set.AlfaUpdated);
         }
